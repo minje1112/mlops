@@ -41,7 +41,13 @@ def test_tracks_actions_datasets_changes_and_training_runs(tmp_path):
 def test_rejects_invalid_dataset_reference():
     writer = MLOpsWriter(project_name="test")
     with pytest.raises(ValueError):
-        writer.set_dataset("bad", "not-a-valid-ref")
+        writer.set_dataset("bad", "ftp://example.com/dataset.csv")
+
+
+def test_accepts_relative_dataset_path():
+    writer = MLOpsWriter(project_name="test")
+    dataset = writer.set_dataset("train", "data/train.csv")
+    assert dataset["data_ref"] == "data/train.csv"
 
 
 def test_small_utility_helpers():

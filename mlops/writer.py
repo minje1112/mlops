@@ -13,10 +13,32 @@ def _timestamp() -> str:
 
 
 def _validate_data_ref(data_ref: str) -> None:
+    if not data_ref.strip():
+        raise ValueError("dataset reference must not be empty")
+
     parsed = urlparse(data_ref)
-    if parsed.scheme in {"http", "https", "s3", "gs", "file"}:
+    if parsed.scheme in {"http", "https"}:
+        if not parsed.netloc:
+            raise ValueError("http(s) dataset reference must include a host")
         return
-    if Path(data_ref).expanduser().is_absolute() or data_ref.startswith("./") or data_ref.startswith("../"):
+    if parsed.scheme in {"s3", "gs"}:
+        if not parsed.netloc or not parsed.path:
+            raise ValueError("cloud dataset reference must include bucket and path")
+        return
+    if parsed.scheme == "file":
+        if not parsed.path:
+            raise ValueError("file dataset reference must include a path")
+        return
+    if parsed.scheme:
+        if len(parsed.scheme) == 1 and data_ref[1:3] in {":\\", ":/"}:
+            return
+        raise ValueError("dataset reference must use a supported URL/URI scheme")
+    if (
+        Path(data_ref).expanduser().is_absolute()
+        or data_ref.startswith("./")
+        or data_ref.startswith("../")
+        or Path(data_ref).name
+    ):
         return
     raise ValueError("dataset reference must be a URL, URI, or filesystem path")
 
@@ -64,13 +86,14 @@ class MLOpsWriter:
     def log_dataset_change(self, name: str, change_type: str, details: str) -> dict[str, Any]:
         if name not in self.datasets:
             raise KeyError(f"dataset '{name}' not found")
+        now = _timestamp()
         change = {
-            "timestamp": _timestamp(),
+            "timestamp": now,
             "change_type": change_type,
             "details": details,
         }
         self.datasets[name]["changes"].append(change)
-        self.datasets[name]["updated_at"] = _timestamp()
+        self.datasets[name]["updated_at"] = now
         return change
 
     def add_training_run(
@@ -134,8 +157,8 @@ class MLOpsWriter:
         for action in data["actions"]:
             lines.append(f"- [{action['timestamp']}] **{action['title']}** ({action['category']}): {action['details']}")
         lines += ["", "## Datasets"]
-        for dataset in data["datasets"].values():
-            lines.append(f"- **{dataset['name']}**: {dataset['data_ref']}")
+        for dataset_name, dataset in data["datasets"].items():
+            lines.append(f"- **{dataset_name}**: {dataset['data_ref']}")
             if dataset.get("note"):
                 lines.append(f"  - note: {dataset['note']}")
             for change in dataset["changes"]:
