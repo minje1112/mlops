@@ -1,3 +1,6 @@
 .pytest_cache/
 __pycache__/
 *.pyc
+mlops_docs/
+*.egg-info/
+.venv/

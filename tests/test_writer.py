@@ -11,10 +11,16 @@ def test_tracks_actions_datasets_changes_and_training_runs(tmp_path):
 
     action = writer.add_action("ingest data", "loaded source table")
     assert action["title"] == "ingest data"
+    assert action["parents"] == []  # the first node is the project root
 
     writer.set_dataset("train", "s3://bucket/churn/v1/train.parquet")
     writer.log_dataset_change("train", "filtering", "Removed null target rows")
     writer.set_dataset("train", "s3://bucket/churn/v2/train.parquet")
+
+    versions = writer.dataset_history("train")
+    assert [node["data"]["version"] for node in versions] == [1, 2]
+    assert versions[1]["parents"] == [versions[0]["id"]]  # v2 grows out of v1
+    assert len(versions[0]["data"]["changes"]) == 1
 
     run = writer.add_training_run(
         "xgboost",
@@ -22,8 +28,8 @@ def test_tracks_actions_datasets_changes_and_training_runs(tmp_path):
         metrics={"accuracy": 0.91, "recall": 0.82},
         hyperparameters={"max_depth": 6},
     )
-    assert run["dataset_ref"].endswith("/v2/train.parquet")
-    assert len(writer.datasets["train"]["changes"]) == 2
+    assert run["parents"] == [versions[1]["id"]]  # trained on the newest version
+    assert run["data"]["metrics"]["recall"] == 0.82
 
     writer.suggest_utilities()
     assert "suggested_utilities" in writer.utilities
@@ -35,6 +41,7 @@ def test_tracks_actions_datasets_changes_and_training_runs(tmp_path):
 
     payload = json.loads(json_path.read_text())
     assert payload["project_name"] == "churn-prediction"
+    assert [node["id"] for node in payload["nodes"]] == ["act-001", "ds-001", "ds-002", "exp-001"]
     assert "## Datasets" in md_path.read_text()
 
 
@@ -47,7 +54,8 @@ def test_rejects_invalid_dataset_reference():
 def test_accepts_relative_dataset_path():
     writer = MLOpsWriter(project_name="test")
     dataset = writer.set_dataset("train", "data/train.csv")
-    assert dataset["data_ref"] == "data/train.csv"
+    assert dataset["data"]["data_ref"] == "data/train.csv"
+    assert dataset["parents"] == []  # first node, so it is the root
 
 
 def test_small_utility_helpers():

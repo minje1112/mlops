@@ -1,0 +1,1424 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MLOps Tracker</title>
+<style>
+  /* ---------------------------------------------------------------- tokens */
+  :root {
+    color-scheme: light;
+    --bg: #f4f5f9;
+    --bg-wash-1: rgba(99, 91, 255, 0.07);
+    --bg-wash-2: rgba(16, 185, 166, 0.06);
+    --panel: #ffffff;
+    --panel-2: #f2f4f8;
+    --panel-3: #e9ecf3;
+    --text: #10121a;
+    --text-soft: #3c4257;
+    --muted: #6b7387;
+    --border: #e3e6ee;
+    --border-strong: #cdd2df;
+    --edge: #a8b0c4;
+
+    --accent: #5b53f0;
+    --accent-2: #8b5cf6;
+    --accent-soft: #ecebff;
+    --accent-ring: rgba(91, 83, 240, 0.28);
+
+    --good: #0f7a52;
+    --good-soft: #dcf5e9;
+    --bad: #c02a20;
+    --bad-soft: #fde7e4;
+    --data: #7c3aed;
+    --data-soft: #f0e9ff;
+    --note: #a35a00;
+    --note-soft: #fdefd9;
+    --exp: #0d7c8f;
+    --exp-soft: #d9f2f6;
+
+    --r-sm: 8px;
+    --r-md: 11px;
+    --r-lg: 16px;
+    --shadow-1: 0 1px 2px rgba(16, 18, 26, .05), 0 1px 3px rgba(16, 18, 26, .04);
+    --shadow-2: 0 4px 10px rgba(16, 18, 26, .07), 0 1px 3px rgba(16, 18, 26, .05);
+    --shadow-3: 0 14px 34px rgba(16, 18, 26, .12), 0 3px 10px rgba(16, 18, 26, .07);
+    --ease: cubic-bezier(.22, .8, .3, 1);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --bg: #0c0e14;
+      --bg-wash-1: rgba(124, 108, 255, 0.16);
+      --bg-wash-2: rgba(16, 185, 166, 0.10);
+      --panel: #14171f;
+      --panel-2: #1b1f29;
+      --panel-3: #232834;
+      --text: #eef0f6;
+      --text-soft: #c3c8d6;
+      --muted: #8e97ac;
+      --border: #262b37;
+      --border-strong: #363d4d;
+      --edge: #49536b;
+
+      --accent: #8b83ff;
+      --accent-2: #b98cff;
+      --accent-soft: #23214a;
+      --accent-ring: rgba(139, 131, 255, 0.36);
+
+      --good: #4ade9e;
+      --good-soft: #12332a;
+      --bad: #ff9a8f;
+      --bad-soft: #3a1f1d;
+      --data: #c4a6ff;
+      --data-soft: #2a2145;
+      --note: #f0b95f;
+      --note-soft: #3a2c14;
+      --exp: #5fd8e8;
+      --exp-soft: #12333c;
+
+      --shadow-1: 0 1px 2px rgba(0, 0, 0, .4);
+      --shadow-2: 0 6px 16px rgba(0, 0, 0, .45);
+      --shadow-3: 0 18px 40px rgba(0, 0, 0, .55);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  /* `display` on a class would otherwise beat the hidden attribute (e.g. .row2). */
+  [hidden] { display: none !important; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background:
+      radial-gradient(1100px 600px at 12% -8%, var(--bg-wash-1), transparent 62%),
+      radial-gradient(900px 520px at 96% 4%, var(--bg-wash-2), transparent 58%),
+      var(--bg);
+    background-attachment: fixed;
+    color: var(--text);
+    font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Inter, Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .87em; }
+  a { color: var(--accent); text-underline-offset: 2px; }
+  .num, .stat .value, td { font-variant-numeric: tabular-nums; }
+
+  ::selection { background: var(--accent-ring); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+  /* ---------------------------------------------------------------- header */
+  header {
+    position: sticky; top: 0; z-index: 15;
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 13px 22px;
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--panel) 78%, transparent);
+    backdrop-filter: saturate(180%) blur(14px);
+    -webkit-backdrop-filter: saturate(180%) blur(14px);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .mark {
+    width: 28px; height: 28px; border-radius: 9px; flex: none;
+    display: grid; place-items: center;
+    background: linear-gradient(140deg, var(--accent), var(--accent-2));
+    box-shadow: 0 3px 10px var(--accent-ring);
+  }
+  .mark svg { width: 17px; height: 17px; display: block; }
+  header h1 { font-size: 16px; margin: 0; letter-spacing: -.015em; font-weight: 650; }
+  header .root {
+    color: var(--muted); font-size: 11.5px;
+    font-family: ui-monospace, Menlo, monospace;
+    padding: 3px 9px; border-radius: 999px;
+    background: var(--panel-2); border: 1px solid var(--border);
+    max-width: 46vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  header .spacer { flex: 1; }
+
+  /* --------------------------------------------------------------- controls */
+  button {
+    font: inherit; font-size: 13px; font-weight: 500;
+    padding: 6px 12px; cursor: pointer;
+    color: var(--text-soft); background: var(--panel);
+    border: 1px solid var(--border-strong); border-radius: 9px;
+    transition: transform .16s var(--ease), border-color .16s var(--ease),
+                box-shadow .16s var(--ease), color .16s var(--ease), background .16s var(--ease);
+  }
+  button:hover { color: var(--text); border-color: var(--accent); box-shadow: var(--shadow-1); }
+  button:active { transform: translateY(1px); }
+  button.primary {
+    background: linear-gradient(140deg, var(--accent), var(--accent-2));
+    border-color: transparent; color: #fff; font-weight: 600;
+    box-shadow: 0 2px 8px var(--accent-ring);
+  }
+  button.primary:hover { box-shadow: 0 5px 16px var(--accent-ring); color: #fff; }
+  button.link {
+    background: none; border: none; padding: 3px 6px;
+    color: var(--muted); font-size: 12px; border-radius: 6px;
+  }
+  button.link:hover { color: var(--accent); background: var(--accent-soft); box-shadow: none; }
+
+  input[type="text"], input[type="search"], input[type="file"], textarea, select {
+    width: 100%; font: inherit; font-size: 14px; padding: 8px 11px;
+    color: var(--text); background: var(--panel);
+    border: 1px solid var(--border-strong); border-radius: 10px;
+    transition: border-color .16s var(--ease), box-shadow .16s var(--ease);
+  }
+  textarea { resize: vertical; min-height: 66px; line-height: 1.5; }
+  select[multiple] { min-height: 104px; }
+  input:focus, textarea:focus, select:focus {
+    outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring);
+  }
+  input::placeholder, textarea::placeholder { color: var(--muted); opacity: .75; }
+  label {
+    display: block; font-size: 11px; text-transform: uppercase;
+    letter-spacing: .07em; color: var(--muted); margin-bottom: 5px; font-weight: 600;
+  }
+  .field { margin-bottom: 12px; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .form-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  form.inset {
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: var(--r-md); padding: 14px; margin-bottom: 14px;
+    animation: rise .24s var(--ease);
+  }
+  .error { color: var(--bad); font-size: 12.5px; font-weight: 500; }
+  .hint { color: var(--muted); font-size: 12px; }
+
+  /* ---------------------------------------------------------------- layout */
+  .layout { display: flex; align-items: flex-start; gap: 20px; padding: 22px; max-width: 1560px; margin: 0 auto; }
+  @media (max-width: 900px) { .layout { flex-direction: column; padding: 16px; } aside { width: 100% !important; position: static !important; } }
+
+  aside { width: 296px; flex: none; position: sticky; top: 74px; }
+  .aside-head { display: flex; gap: 8px; margin-bottom: 12px; }
+  .aside-head input { flex: 1; }
+  .project {
+    position: relative; display: block; width: 100%; text-align: left;
+    margin-bottom: 9px; padding: 12px 13px 12px 15px;
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--r-md); cursor: pointer; box-shadow: var(--shadow-1);
+    overflow: hidden;
+  }
+  .project::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: linear-gradient(var(--accent), var(--accent-2));
+    transform: scaleY(0); transform-origin: center;
+    transition: transform .22s var(--ease);
+  }
+  .project:hover { transform: translateY(-1px); box-shadow: var(--shadow-2); border-color: var(--border-strong); }
+  .project[aria-current="true"] { border-color: var(--accent); background: var(--panel); box-shadow: var(--shadow-2); }
+  .project[aria-current="true"]::before { transform: scaleY(1); }
+  .project .name { font-weight: 640; font-size: 14px; letter-spacing: -.01em; color: var(--text); }
+  .project .objective { color: var(--text-soft); font-size: 12.5px; margin-top: 3px; }
+  .project .meta { color: var(--muted); font-size: 11.5px; margin-top: 8px; }
+
+  /* ----------------------------------------------------------------- cards */
+  main { flex: 1; min-width: 0; }
+  section.card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--r-lg); padding: 18px 20px; margin-bottom: 18px;
+    box-shadow: var(--shadow-1);
+  }
+  section.card.selected {
+    border-color: var(--accent);
+    box-shadow: var(--shadow-2), 0 0 0 3px var(--accent-ring);
+  }
+  .card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  .card-head h2 {
+    flex: 1; margin: 0; font-size: 11.5px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .1em; color: var(--muted);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .card-head h2::before {
+    content: ""; width: 6px; height: 6px; border-radius: 2px;
+    background: linear-gradient(140deg, var(--accent), var(--accent-2));
+  }
+  h1.project-title {
+    font-size: 26px; margin: 0 0 5px; letter-spacing: -.028em; font-weight: 680;
+  }
+  .sub { color: var(--muted); font-size: 13px; }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(126px, 1fr)); gap: 12px; margin-top: 18px; }
+  .stat {
+    position: relative; overflow: hidden;
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: var(--r-md); padding: 13px 14px;
+    transition: transform .18s var(--ease), box-shadow .18s var(--ease);
+  }
+  .stat::after {
+    content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    opacity: .55;
+  }
+  .stat:hover { transform: translateY(-2px); box-shadow: var(--shadow-2); }
+  .stat .value { font-size: 25px; font-weight: 680; letter-spacing: -.03em; line-height: 1.1; }
+  .stat .label {
+    color: var(--muted); font-size: 10.5px; text-transform: uppercase;
+    letter-spacing: .08em; font-weight: 600; margin-top: 3px;
+  }
+
+  /* ---------------------------------------------------------------- tables */
+  .scroll { overflow-x: auto; border-radius: var(--r-md); }
+  .scroll::-webkit-scrollbar { height: 9px; }
+  .scroll::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 99px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th {
+    color: var(--muted); font-weight: 700; font-size: 10.5px;
+    text-transform: uppercase; letter-spacing: .08em; white-space: nowrap;
+    background: var(--panel-2);
+  }
+  th:first-child { border-top-left-radius: var(--r-sm); }
+  th:last-child { border-top-right-radius: var(--r-sm); }
+  tbody tr { transition: background .14s var(--ease); }
+  tbody tr:hover { background: var(--panel-2); }
+  tbody tr:last-child td { border-bottom: none; }
+  .bar { height: 5px; border-radius: 99px; background: var(--panel-3); overflow: hidden; margin-top: 5px; min-width: 70px; }
+  .bar > i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+
+  /* ----------------------------------------------------------- chips/badges */
+  .chip {
+    display: inline-block; margin: 0 5px 5px 0; padding: 3px 9px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--text); font-size: 12px;
+    border: 1px solid transparent;
+  }
+  .chip.plain { background: var(--panel-2); color: var(--text-soft); border-color: var(--border); }
+  button.chip { cursor: pointer; transition: transform .15s var(--ease), border-color .15s var(--ease), box-shadow .15s var(--ease); }
+  button.chip:hover { border-color: var(--accent); transform: translateY(-1px); box-shadow: var(--shadow-1); }
+  button.chip.path, span.chip.path {
+    background: var(--note-soft); color: var(--note); border-color: color-mix(in srgb, var(--note) 30%, transparent);
+    font-family: ui-monospace, Menlo, monospace; font-size: 11.5px;
+  }
+  .badge {
+    display: inline-block; padding: 2px 9px; border-radius: 999px;
+    font-size: 11px; font-weight: 650; letter-spacing: .02em;
+    border: 1px solid transparent;
+  }
+  .badge.completed { background: var(--good-soft); color: var(--good); border-color: color-mix(in srgb, var(--good) 26%, transparent); }
+  .badge.failed { background: var(--bad-soft); color: var(--bad); border-color: color-mix(in srgb, var(--bad) 26%, transparent); }
+  .badge.running { background: var(--accent-soft); color: var(--accent); border-color: var(--accent-ring); }
+  .badge.evaluation { background: var(--note-soft); color: var(--note); border-color: color-mix(in srgb, var(--note) 26%, transparent); }
+  .badge.training, .badge.finetune { background: var(--exp-soft); color: var(--exp); border-color: color-mix(in srgb, var(--exp) 26%, transparent); }
+
+  /* ------------------------------------------------------------------ tree
+     Every colour here is set through CSS, never through an SVG presentation
+     attribute: `stroke="var(--x)"` is not honoured by every browser, which
+     leaves the connecting lines unpainted. */
+  .tree svg { display: block; overflow: visible; }
+  .tree .node { cursor: pointer; transition: opacity .25s var(--ease); }
+  .tree .node .card-shape { transition: filter .18s var(--ease), stroke-width .18s var(--ease); }
+  .tree .node:hover .card-shape { stroke-width: 2; filter: url(#lift); }
+  .tree .node.dim { opacity: .22; }
+
+  /* non-scaling-stroke keeps lines a real pixel wide when a wide tree is
+     scaled down to fit the card, instead of thinning away to nothing. */
+  .tree .edge { stroke: var(--edge); stroke-width: 1.8; fill: none; vector-effect: non-scaling-stroke; }
+  .tree .edge.on { stroke: var(--accent); stroke-width: 2.6; stroke-dasharray: 7 5; animation: flow 1.1s linear infinite; }
+  .tree .edge.off { opacity: .25; }
+  .tree marker#arrow path { fill: var(--edge); }
+  .tree marker#arrow-on path { fill: var(--accent); }
+
+  .tree .card-shape { fill: var(--panel); stroke: var(--border-strong); stroke-width: 1.2; }
+  .tree .sel .card-shape { stroke: var(--accent); stroke-width: 2.4; }
+  .tree .t-title { fill: var(--text); }
+  .tree .t-detail { fill: var(--muted); }
+  .tree .type-bar, .tree .t-id { fill: var(--accent); }
+  .tree .t-note .type-bar, .tree .t-note .t-id { fill: var(--note); }
+  .tree .t-dataset .type-bar, .tree .t-dataset .t-id { fill: var(--data); }
+  .tree .t-experiment .type-bar, .tree .t-experiment .t-id { fill: var(--exp); }
+  .tree .t-artifact .type-bar, .tree .t-artifact .t-id { fill: var(--good); }
+  .tree .t-action.sel .card-shape { fill: var(--accent-soft); }
+  .tree .t-note.sel .card-shape { fill: var(--note-soft); }
+  .tree .t-dataset.sel .card-shape { fill: var(--data-soft); }
+  .tree .t-experiment.sel .card-shape { fill: var(--exp-soft); }
+  .tree .t-artifact.sel .card-shape { fill: var(--good-soft); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 14px; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend span::before { content: ""; width: 9px; height: 9px; border-radius: 3px; }
+  .legend .l-action::before { background: var(--accent); }
+  .legend .l-note::before { background: var(--note); }
+  .legend .l-dataset::before { background: var(--data); }
+  .legend .l-experiment::before { background: var(--exp); }
+  .legend .l-artifact::before { background: var(--good); }
+
+  /* ----------------------------------------------------------- attachments */
+  .attachments { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px; }
+  .attachment {
+    border: 1px solid var(--border); border-radius: var(--r-md); padding: 9px; width: 172px;
+    background: var(--panel-2); font-size: 12px;
+    transition: transform .18s var(--ease), box-shadow .18s var(--ease), border-color .18s var(--ease);
+  }
+  .attachment:hover { transform: translateY(-2px); box-shadow: var(--shadow-2); border-color: var(--border-strong); }
+  .attachment img {
+    width: 100%; height: 96px; object-fit: cover; border-radius: var(--r-sm);
+    background: var(--panel); border: 1px solid var(--border);
+  }
+  .attachment .name { margin-top: 8px; word-break: break-word; font-weight: 550; color: var(--text); }
+  .attachment .kind { color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; margin-top: 2px; }
+  .attachment .drop {
+    font-size: 34px; text-align: center; line-height: 96px; border-radius: var(--r-sm);
+    background: var(--panel); border: 1px solid var(--border);
+  }
+
+  /* -------------------------------------------------------------- timeline */
+  .timeline { list-style: none; margin: 10px 0 0; padding: 0; }
+  .timeline li { padding: 10px 0 10px 16px; border-left: 2px solid var(--border); position: relative; }
+  .timeline li::before {
+    content: ""; position: absolute; left: -5px; top: 17px;
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 0 3px var(--panel);
+  }
+  .checklist { margin: 6px 0 12px; padding-left: 18px; color: var(--text-soft); font-size: 13.5px; }
+  .checklist li { margin-bottom: 3px; }
+  .empty { color: var(--muted); font-size: 13.5px; }
+  .placeholder { text-align: center; padding: 54px 22px; }
+  .placeholder pre {
+    display: inline-block; text-align: left; background: var(--panel-2);
+    border: 1px solid var(--border);
+    padding: 14px 16px; border-radius: var(--r-md); font-size: 12.5px;
+    overflow-x: auto; max-width: 100%; line-height: 1.6;
+  }
+
+  /* ----------------------------------------------------------------- toast */
+  #toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+    background: var(--panel); border: 1px solid var(--border-strong); border-radius: 12px;
+    padding: 11px 17px; font-size: 13px; font-weight: 500;
+    box-shadow: var(--shadow-3); z-index: 30;
+    animation: toast-in .3s var(--ease);
+  }
+
+  /* ---------------------------------------------------------------- motion */
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
+  @keyframes flow { to { stroke-dashoffset: -24; } }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none">
+      <path d="M12 6.5v4.2M12 10.7 6.8 16M12 10.7 17.2 16" stroke="#fff" stroke-width="1.7" stroke-linecap="round"></path>
+      <circle cx="12" cy="4.6" r="2.5" fill="#fff"></circle>
+      <circle cx="6.2" cy="18" r="2.5" fill="#fff"></circle>
+      <circle cx="17.8" cy="18" r="2.5" fill="#fff"></circle>
+    </svg></span><h1>MLOps Tracker</h1></div>
+  <span class="root" id="root-label" title="documents folder"></span>
+  <span class="spacer"></span>
+  <button id="refresh">↻ Refresh</button>
+</header>
+
+<div class="layout">
+  <aside>
+    <div class="aside-head">
+      <input type="search" id="filter" placeholder="Filter projects..." autocomplete="off">
+      <button id="new-project" class="primary" title="Create a project">+ New</button>
+    </div>
+    <div id="new-project-form"></div>
+    <div id="project-list"></div>
+  </aside>
+  <main id="detail"></main>
+</div>
+
+<script>
+const state = {
+  projects: [], slug: null, filter: "", detail: null,
+  selected: null,       // node id whose detail panel is open
+  form: null,           // {mode: "child"|"edit"|"attach", nodeId}
+  canOpenPaths: false,
+};
+
+const NODE_TYPES = ["action", "note", "dataset", "experiment", "artifact"];
+const SPLITS = ["raw", "train", "validation", "test", "features", "other"];
+const MODES = ["evaluation", "training", "finetune"];
+const ARTIFACT_KINDS = ["model", "export", "report", "deployment"];
+const PRIMARY_METRICS = ["cer", "wer", "pr_auc", "roc_auc", "auc", "ndcg", "f1", "accuracy", "recall", "precision"];
+
+const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+async function api(path, method = "GET", body) {
+  const response = await fetch(path, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || `${response.status} ${response.statusText}`);
+  return payload;
+}
+
+let toastTimer = null;
+function toast(message) {
+  let box = document.getElementById("toast");
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "toast";
+    document.body.appendChild(box);
+  }
+  box.textContent = message;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => box.remove(), 4000);
+}
+
+function when(iso) {
+  if (!iso) return "-";
+  const date = new Date(iso);
+  return isNaN(date) ? iso : date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+function ago(iso) {
+  if (!iso) return "no activity";
+  const date = new Date(iso);
+  if (isNaN(date)) return iso;
+  const seconds = (Date.now() - date.getTime()) / 1000;
+  const steps = [[31536000, "y"], [2592000, "mo"], [604800, "w"], [86400, "d"], [3600, "h"], [60, "m"]];
+  for (const [size, unit] of steps) {
+    if (seconds >= size) return `${Math.floor(seconds / size)}${unit} ago`;
+  }
+  return "just now";
+}
+
+function num(value) {
+  if (typeof value === "number") return Number.isInteger(value) ? value : Number(value.toFixed(4));
+  if (value && typeof value === "object") return JSON.stringify(value);
+  return value;
+}
+
+const clip = (text, max) => (String(text).length > max ? String(text).slice(0, max - 1) + "…" : String(text));
+
+function refLink(ref) {
+  const safe = esc(ref);
+  return /^https?:\/\//i.test(ref)
+    ? `<a class="mono" href="${safe}" target="_blank" rel="noreferrer noopener">${safe}</a>`
+    : `<span class="mono">${safe}</span>`;
+}
+
+function pairs(object, plain) {
+  const entries = Object.entries(object || {});
+  if (!entries.length) return '<span class="empty">-</span>';
+  return entries
+    .map(([key, value]) => `<span class="chip${plain ? " plain" : ""}">${esc(key)}: ${esc(num(value))}</span>`)
+    .join("");
+}
+
+function parsePairs(text) {
+  // "learning_rate=0.05, num_leaves=64" -> {learning_rate: 0.05, num_leaves: 64}
+  const out = {};
+  String(text || "").split(/[,\n]/).forEach((part) => {
+    const index = part.indexOf("=");
+    if (index < 1) return;
+    const key = part.slice(0, index).trim();
+    const raw = part.slice(index + 1).trim();
+    if (!key) return;
+    out[key] = raw !== "" && !isNaN(Number(raw)) ? Number(raw) : raw;
+  });
+  return out;
+}
+
+function nodeById(id) {
+  return (state.detail?.document.nodes || []).find((node) => node.id === id) || null;
+}
+
+function nodeLabel(node) {
+  if (!node) return "";
+  if (node.type === "dataset") return `${node.title} v${node.data.version}`;
+  return node.title;
+}
+
+function typeDetail(node) {
+  if (node.type === "dataset") return `v${node.data.version} · ${node.data.split}`;
+  if (node.type === "experiment") return `${node.data.mode} · ${node.data.status}`;
+  if (node.type === "artifact") return node.data.kind;
+  if (node.type === "action") return node.data.category || "action";
+  return node.summary || "note";
+}
+
+/* ------------------------------------------------------------------ sidebar */
+
+function renderList() {
+  const needle = state.filter.trim().toLowerCase();
+  const matches = state.projects.filter((project) =>
+    !needle ||
+    project.project_name.toLowerCase().includes(needle) ||
+    (project.objective || "").toLowerCase().includes(needle));
+
+  const list = document.getElementById("project-list");
+  if (!matches.length) {
+    list.innerHTML = `<p class="empty">${state.projects.length ? "No project matches that filter." : "No projects yet — create one above."}</p>`;
+    return;
+  }
+  list.innerHTML = matches.map((project) => `
+    <button class="project" data-slug="${esc(project.slug)}" aria-current="${project.slug === state.slug}">
+      <div class="name">${esc(project.project_name)}</div>
+      ${project.objective ? `<div class="objective">${esc(project.objective)}</div>` : ""}
+      <div class="meta">
+        ${project.counts.nodes} nodes &middot; ${project.counts.experiment} experiments
+        &middot; ${project.counts.dataset} datasets &middot; ${esc(ago(project.last_activity))}
+      </div>
+    </button>`).join("");
+
+  list.querySelectorAll(".project").forEach((node) => {
+    node.onclick = () => { location.hash = node.dataset.slug; };
+  });
+}
+
+function renderNewProjectForm(open, error) {
+  const host = document.getElementById("new-project-form");
+  if (!open) { host.innerHTML = ""; return; }
+  host.innerHTML = `
+    <form class="inset" id="create-form">
+      <div class="field">
+        <label for="np-name">Project name</label>
+        <input type="text" id="np-name" required autocomplete="off" placeholder="granite-docling">
+      </div>
+      <div class="field">
+        <label for="np-objective">Objective</label>
+        <input type="text" id="np-objective" autocomplete="off" placeholder="cut CER below 0.08">
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="primary">Create</button>
+        <button type="button" id="np-cancel">Cancel</button>
+        ${error ? `<span class="error">${esc(error)}</span>` : ""}
+      </div>
+    </form>`;
+  const name = document.getElementById("np-name");
+  name.focus();
+  document.getElementById("np-cancel").onclick = () => renderNewProjectForm(false);
+  document.getElementById("create-form").onsubmit = async (event) => {
+    event.preventDefault();
+    try {
+      const created = await api("api/projects", "POST", {
+        project_name: name.value,
+        objective: document.getElementById("np-objective").value,
+      });
+      renderNewProjectForm(false);
+      await load();
+      location.hash = created.slug;
+    } catch (failure) {
+      renderNewProjectForm(true, failure.message);
+      document.getElementById("np-name").value = name.value;
+    }
+  };
+}
+
+/* ------------------------------------------------------------------- detail */
+
+function renderPlaceholder() {
+  document.getElementById("detail").innerHTML = state.projects.length
+    ? `<section class="card placeholder"><p class="empty">Select a project to see its tree.</p></section>`
+    : `<section class="card placeholder">
+         <p class="empty">Create a project with <strong>+ New</strong>, or start one from Python:</p>
+         <pre>from mlops import MLOpsWriter
+
+writer = MLOpsWriter("granite-docling", objective="cut CER below 0.08")
+root = writer.add_action("kickoff", "scope the fine-tune")
+base = writer.add_experiment("granite-docling-258M", parents=root["id"],
+                             mode="evaluation", metrics={"cer": 0.19})
+writer.save()</pre>
+       </section>`;
+}
+
+function headlineMetric(metricSummary) {
+  // "support" is a row count, not a score, so it never headlines the project.
+  const names = Object.keys(metricSummary).filter((name) => !/support$/i.test(name));
+  if (!names.length) return null;
+  const rank = (name) => {
+    const index = PRIMARY_METRICS.findIndex((known) => name.toLowerCase().includes(known));
+    return index < 0 ? PRIMARY_METRICS.length : index;
+  };
+  const chosen = names.slice().sort((a, b) => rank(a) - rank(b))[0];
+  return [chosen, metricSummary[chosen]];
+}
+
+function overview(summary, metricSummary) {
+  const best = headlineMetric(metricSummary);
+  return `
+  <section class="card">
+    <h1 class="project-title">${esc(summary.project_name)}</h1>
+    <div class="sub">${summary.objective ? esc(summary.objective) : "No objective recorded"}</div>
+    <div class="sub">Created ${esc(when(summary.created_at))} &middot; last activity ${esc(ago(summary.last_activity))}</div>
+    <div class="stats">
+      <div class="stat"><div class="value">${summary.counts.nodes}</div><div class="label">Nodes</div></div>
+      <div class="stat"><div class="value">${summary.counts.experiment}</div><div class="label">Experiments</div></div>
+      <div class="stat"><div class="value">${summary.counts.dataset}</div><div class="label">Dataset versions</div></div>
+      <div class="stat"><div class="value">${summary.counts.artifact}</div><div class="label">Artifacts</div></div>
+      <div class="stat"><div class="value">${best ? esc(num(best[1].best)) : "-"}</div><div class="label">${best ? esc("best " + best[0]) : "Best metric"}</div></div>
+    </div>
+  </section>`;
+}
+
+/* --------------------------------------------------------------- the tree */
+
+const TYPE_ICON = {
+  action: "🎯", note: "📝", dataset: "🗃️", experiment: "🧪", artifact: "📦",
+};
+
+function layout(nodes, depths) {
+  const W = 214, H = 70, GAP_X = 26, GAP_Y = 58, PAD = 18;
+  const rows = [];
+  nodes.forEach((node) => {
+    const row = depths[node.id] || 0;
+    (rows[row] = rows[row] || []).push(node);
+  });
+
+  const widest = Math.max(...rows.map((row) => (row || []).length));
+  const canvas = widest * (W + GAP_X) - GAP_X;
+  const at = new Map();
+
+  rows.forEach((row, index) => {
+    const bunch = row || [];
+    if (index > 0) {
+      // Barycentre ordering: sit each node under the average of its parents.
+      const key = (node) => {
+        const placed = (node.parents || [])
+          .map((id) => at.get(id))
+          .filter(Boolean)
+          .map((spot) => spot.x + W / 2);
+        return placed.length ? placed.reduce((a, b) => a + b, 0) / placed.length : Number.MAX_SAFE_INTEGER;
+      };
+      bunch.sort((a, b) => key(a) - key(b));
+    }
+    const rowWidth = bunch.length * (W + GAP_X) - GAP_X;
+    const start = PAD + (canvas - rowWidth) / 2;
+    bunch.forEach((node, column) => {
+      at.set(node.id, { x: start + column * (W + GAP_X), y: PAD + index * (H + GAP_Y) });
+    });
+  });
+
+  return {
+    W, H, at,
+    width: canvas + PAD * 2,
+    height: PAD * 2 + rows.length * (H + GAP_Y) - GAP_Y,
+  };
+}
+
+function treeCard(graph) {
+  const nodes = graph.nodes;
+  if (!nodes.length) {
+    return `
+    <section class="card">
+      <div class="card-head"><h2>Tree</h2></div>
+      <p class="empty">Every project starts with one root action — what you did first. Everything else hangs off it.</p>
+      <div id="root-form-host"></div>
+      <button id="add-root" class="primary">+ Create the root action</button>
+    </section>`;
+  }
+
+  const { W, H, at, width, height } = layout(nodes, graph.depths);
+  const lit = state.selected
+    ? new Set([state.selected, ...ancestorIds(state.selected), ...childIds(state.selected)])
+    : null;
+
+  const edges = graph.edges.map((edge) => {
+    const from = at.get(edge.from), to = at.get(edge.to);
+    if (!from || !to) return "";
+    const x1 = from.x + W / 2, y1 = from.y + H, x2 = to.x + W / 2, y2 = to.y;
+    const mid = (y1 + y2) / 2;
+    const active = lit && lit.has(edge.from) && lit.has(edge.to);
+    const cls = `edge${active ? " on" : ""}${lit && !active ? " off" : ""}`;
+    return `<path class="${cls}" d="M${x1},${y1} C${x1},${mid} ${x2},${mid} ${x2},${y2}"
+      stroke-linecap="round" marker-end="url(#arrow${active ? "-on" : ""})"></path>`;
+  }).join("");
+
+  const boxes = nodes.map((node) => {
+    const spot = at.get(node.id);
+    const selected = node.id === state.selected ? " sel" : "";
+    const dim = lit && !lit.has(node.id) ? " dim" : "";
+    const clipped = (node.attachments || []).length;
+    return `
+      <g class="node t-${esc(node.type)}${selected}${dim}" data-node="${esc(node.id)}" tabindex="0" role="button">
+        <rect class="card-shape" x="${spot.x}" y="${spot.y}" width="${W}" height="${H}" rx="13"
+              filter="url(#nodeShadow)"></rect>
+        <rect class="type-bar" x="${spot.x + 7}" y="${spot.y + 11}" width="3.5" height="${H - 22}" rx="2"></rect>
+        <text x="${spot.x + W - 13}" y="${spot.y + 24}" font-size="14" text-anchor="end">${TYPE_ICON[node.type] || ""}</text>
+        <text class="t-title" x="${spot.x + 19}" y="${spot.y + 24}" font-size="12.5" font-weight="640"
+              letter-spacing="-0.2">${esc(clip(nodeLabel(node), 23))}</text>
+        <text class="t-detail" x="${spot.x + 19}" y="${spot.y + 41}" font-size="10.5">${esc(clip(typeDetail(node), 30))}</text>
+        <text class="t-id" x="${spot.x + 19}" y="${spot.y + 57}" font-size="9.5" font-weight="600"
+              letter-spacing="0.4">${esc(node.id.toUpperCase())}${clipped ? `  ·  ${clipped} 📎` : ""}</text>
+        <title>${esc(nodeLabel(node))} — ${esc(node.type)}</title>
+      </g>`;
+  }).join("");
+
+  return `
+  <section class="card tree">
+    <div class="card-head">
+      <h2>Tree — what led to what</h2>
+      <span class="hint">click a node to see it and add work underneath</span>
+    </div>
+    <div class="legend">
+      <span class="l-action">action</span><span class="l-note">note</span><span class="l-dataset">dataset</span>
+      <span class="l-experiment">experiment</span><span class="l-artifact">artifact</span>
+    </div>
+    <div class="scroll">
+      <svg viewBox="0 0 ${width} ${height}" width="100%" style="max-width:${width}px;height:auto;margin:0 auto"
+           role="img" aria-label="Project node tree">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+            <path d="M0,1 L9,5 L0,9 z"></path>
+          </marker>
+          <marker id="arrow-on" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+            <path d="M0,1 L9,5 L0,9 z"></path>
+          </marker>
+          <filter id="nodeShadow" x="-30%" y="-30%" width="160%" height="180%">
+            <feDropShadow dx="0" dy="2" stdDeviation="2.5" flood-color="#0b0d14" flood-opacity="0.10"></feDropShadow>
+          </filter>
+          <filter id="lift" x="-40%" y="-40%" width="180%" height="200%">
+            <feDropShadow dx="0" dy="5" stdDeviation="6" flood-color="#0b0d14" flood-opacity="0.20"></feDropShadow>
+          </filter>
+        </defs>
+        ${edges}${boxes}
+      </svg>
+    </div>
+  </section>`;
+}
+
+function ancestorIds(nodeId) {
+  const found = new Set();
+  const queue = [...(nodeById(nodeId)?.parents || [])];
+  while (queue.length) {
+    const current = queue.pop();
+    if (found.has(current)) continue;
+    found.add(current);
+    queue.push(...(nodeById(current)?.parents || []));
+  }
+  return found;
+}
+
+function childIds(nodeId) {
+  return (state.detail?.document.nodes || [])
+    .filter((node) => (node.parents || []).includes(nodeId))
+    .map((node) => node.id);
+}
+
+/* ------------------------------------------------------- the selected node */
+
+function attachmentTile(nodeId, attachment) {
+  const url = attachment.filename
+    ? `api/attachments/${encodeURIComponent(state.slug)}/${encodeURIComponent(nodeId)}/${encodeURIComponent(attachment.filename)}`
+    : attachment.href;
+  let preview;
+  if (attachment.type === "image") {
+    preview = `<a href="${esc(url)}" target="_blank" rel="noreferrer noopener"><img src="${esc(url)}" alt="${esc(attachment.label)}"></a>`;
+  } else if (attachment.type === "pdf") {
+    preview = `<a href="${esc(url)}" target="_blank" rel="noreferrer noopener"><div class="drop">📄</div></a>`;
+  } else if (attachment.type === "path") {
+    preview = `<div class="drop">📁</div>`;
+  } else if (attachment.type === "link") {
+    preview = `<a href="${esc(url)}" target="_blank" rel="noreferrer noopener"><div class="drop">🔗</div></a>`;
+  } else {
+    preview = `<a href="${esc(url)}" target="_blank" rel="noreferrer noopener"><div class="drop">📎</div></a>`;
+  }
+  const action = attachment.type === "path"
+    ? `<button class="chip path" data-open="${esc(attachment.href)}">open folder</button>`
+    : "";
+  return `
+    <div class="attachment">
+      ${preview}
+      <div class="name">${esc(attachment.label)}</div>
+      <div class="kind">${esc(attachment.type)}${attachment.size ? ` · ${Math.max(1, Math.round(attachment.size / 1024))} KB` : ""}</div>
+      ${action}
+      <button class="link" data-detach="${esc(attachment.id)}">remove</button>
+    </div>`;
+}
+
+function nodeFields(node) {
+  const data = node.data || {};
+  if (node.type === "dataset") {
+    return `
+      <div class="sub">version <strong>${esc(data.version)}</strong> · split <strong>${esc(data.split)}</strong></div>
+      <div>${refLink(data.data_ref || "")}</div>
+      ${(data.changes || []).length ? `<ul class="timeline">${data.changes.slice().reverse().map((change) => `
+        <li><div class="sub">${esc(when(change.timestamp))}</div>
+            <div><strong>${esc(change.change_type)}</strong></div>
+            <div class="sub">${esc(change.details || "")}</div></li>`).join("")}</ul>` : ""}`;
+  }
+  if (node.type === "experiment") {
+    const environment = Object.entries(data.environment || {}).map(([k, v]) => `${k} ${v}`).join(" · ");
+    return `
+      <div><span class="badge ${esc(data.status)}">${esc(data.status)}</span>
+           <span class="badge ${esc(data.mode)}">${esc(data.mode)}</span>
+           <span class="sub">${esc(data.model_name || "")}${data.architecture ? " · " + esc(data.architecture) : ""}</span></div>
+      <div style="margin-top:8px"><span class="sub">metrics</span><br>${pairs(data.metrics)}</div>
+      <div style="margin-top:6px"><span class="sub">parameters</span><br>${pairs(data.parameters, true)}</div>
+      ${data.duration_seconds ? `<div class="sub" style="margin-top:6px">took ${esc(num(data.duration_seconds))}s</div>` : ""}
+      ${environment ? `<div style="margin-top:6px"><span class="sub">environment</span>
+        <div class="sub mono" style="font-size:11px">${esc(environment)}</div></div>` : ""}
+      ${data.error ? `<div class="error">${esc(data.error)}</div>` : ""}`;
+  }
+  if (node.type === "artifact") {
+    return `<div class="sub">kind <strong>${esc(data.kind)}</strong></div><div>${refLink(data.artifact_ref || "")}</div>`;
+  }
+  if (node.type === "action") {
+    return `<div class="sub">category <strong>${esc(data.category || "operation")}</strong></div>`;
+  }
+  return "";
+}
+
+function pathChips(nodeId) {
+  const paths = (state.detail.paths || {})[nodeId] || [];
+  if (!paths.length) return "";
+  return `<div style="margin-top:8px">${paths.map((path) =>
+    state.canOpenPaths
+      ? `<button class="chip path" data-open="${esc(path)}" title="Open in file manager">📁 ${esc(path)}</button>`
+      : `<span class="chip path">📁 ${esc(path)}</span>`).join("")}</div>`;
+}
+
+function selectedCard() {
+  const node = nodeById(state.selected);
+  if (!node) return "";
+  const parents = (node.parents || []).map((id) =>
+    `<button class="chip" data-goto="${esc(id)}">${esc(nodeLabel(nodeById(id)) || id)}</button>`).join("") || '<span class="empty">root — nothing before this</span>';
+  const children = childIds(node.id).map((id) =>
+    `<button class="chip plain" data-goto="${esc(id)}">${esc(nodeLabel(nodeById(id)) || id)}</button>`).join("") || '<span class="empty">nothing yet</span>';
+  const edited = node.updated_at !== node.created_at
+    ? ` · edited ${esc(ago(node.updated_at))}` : "";
+
+  return `
+  <section class="card selected">
+    <div class="card-head">
+      <h2>${esc(node.type)} · ${esc(node.id)}</h2>
+      <button data-form="edit">Edit</button>
+      <button data-form="attach">Attach</button>
+      <button data-form="child" class="primary">+ Add node underneath</button>
+    </div>
+    <div style="font-size:18px;font-weight:650">${esc(nodeLabel(node))}</div>
+    <div class="sub">created ${esc(when(node.created_at))}${edited}</div>
+    ${node.summary ? `<p style="white-space:pre-wrap;margin:10px 0 0">${esc(node.summary)}</p>` : ""}
+    ${pathChips(node.id)}
+    <div style="margin-top:12px">${nodeFields(node)}</div>
+    <div style="margin-top:12px"><span class="sub">came from</span><br>${parents}</div>
+    <div style="margin-top:8px"><span class="sub">led to</span><br>${children}</div>
+    ${(node.attachments || []).length
+      ? `<div style="margin-top:12px"><span class="sub">attachments</span>
+           <div class="attachments">${node.attachments.map((item) => attachmentTile(node.id, item)).join("")}</div></div>`
+      : ""}
+    <div id="node-form-host" style="margin-top:14px"></div>
+  </section>`;
+}
+
+/* -------------------------------------------------------------------- forms */
+
+function nodeFormHtml(mode, node) {
+  if (mode === "attach") {
+    return `
+    <form class="inset" id="node-form">
+      <div class="field">
+        <label for="nf-kind">Attachment</label>
+        <select id="nf-kind" name="kind">
+          <option value="upload">Upload a picture / PDF / file</option>
+          <option value="link">Link (URL)</option>
+          <option value="path">Folder or file on this machine</option>
+        </select>
+      </div>
+      <div class="field" id="nf-upload-field">
+        <label for="nf-file">File</label>
+        <input type="file" id="nf-file" name="file">
+      </div>
+      <div class="field" id="nf-href-field" hidden>
+        <label for="nf-href">URL or path</label>
+        <input type="text" id="nf-href" name="href" autocomplete="off" placeholder="/home/rookie/Documents/...">
+      </div>
+      <div class="field">
+        <label for="nf-label">Label</label>
+        <input type="text" id="nf-label" name="label" autocomplete="off" placeholder="optional">
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="primary">Attach</button>
+        <button type="button" data-cancel="1">Cancel</button>
+        <span class="error" data-error></span>
+      </div>
+    </form>`;
+  }
+
+  const editing = mode === "edit";
+  const type = editing ? node.type : "experiment";
+  const data = editing ? node.data || {} : {};
+  const isRoot = editing && !(node.parents || []).length;
+  const options = state.detail.document.nodes
+    .filter((item) => !editing || item.id !== node.id)
+    .map((item) =>
+      `<option value="${esc(item.id)}" ${(editing ? node.parents : [node.id]).includes(item.id) ? "selected" : ""}>
+         ${esc(item.id)} · ${esc(clip(nodeLabel(item), 40))}</option>`).join("");
+  const parentsField = isRoot
+    ? `<div class="field">
+         <label>Came from</label>
+         <div class="hint">This is the root — the origin of the project, so it has no parent.</div>
+       </div>`
+    : `<div class="field">
+         <label for="nf-parents">Came from (one or more)</label>
+         <select id="nf-parents" name="parents" multiple>${options}</select>
+         <div class="hint">Every node except the root names the work it grew out of. Ctrl/Cmd-click to pick several.</div>
+       </div>`;
+
+  return `
+  <form class="inset" id="node-form">
+    <div class="row2">
+      <div class="field">
+        <label for="nf-type">Type</label>
+        <select id="nf-type" name="type" ${editing ? "disabled" : ""}>
+          ${NODE_TYPES.map((value) => `<option value="${value}" ${value === type ? "selected" : ""}>${value}</option>`).join("")}
+        </select>
+      </div>
+      <div class="field">
+        <label for="nf-title">Title</label>
+        <input type="text" id="nf-title" name="title" required autocomplete="off"
+               value="${esc(editing ? node.title : "")}" placeholder="what this node is">
+      </div>
+    </div>
+    <div class="field">
+      <label for="nf-summary">Notes</label>
+      <textarea id="nf-summary" name="summary" placeholder="what happened, what you saw. Paths like /home/rookie/data become clickable.">${esc(editing ? node.summary : "")}</textarea>
+    </div>
+    <div class="field" data-for="action">
+      <label for="nf-category">Category</label>
+      <input type="text" id="nf-category" name="category" autocomplete="off" value="${esc(data.category || "operation")}">
+    </div>
+    <div class="row2" data-for="dataset">
+      <div class="field">
+        <label for="nf-data-ref">Dataset reference</label>
+        <input type="text" id="nf-data-ref" name="data_ref" autocomplete="off"
+               value="${esc(data.data_ref || "")}" placeholder="s3://... or /path/to/data">
+      </div>
+      <div class="field">
+        <label for="nf-split">Split</label>
+        <select id="nf-split" name="split">
+          ${SPLITS.map((value) => `<option value="${value}" ${value === (data.split || "train") ? "selected" : ""}>${value}</option>`).join("")}
+        </select>
+      </div>
+    </div>
+    <div data-for="experiment">
+      <div class="row2">
+        <div class="field">
+          <label for="nf-model">Model</label>
+          <input type="text" id="nf-model" name="model_name" autocomplete="off" value="${esc(data.model_name || "")}">
+        </div>
+        <div class="field">
+          <label for="nf-mode">Mode</label>
+          <select id="nf-mode" name="mode">
+            ${MODES.map((value) => `<option value="${value}" ${value === (data.mode || "evaluation") ? "selected" : ""}>${value}</option>`).join("")}
+          </select>
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label for="nf-metrics">Metrics</label>
+          <input type="text" id="nf-metrics" name="metrics" autocomplete="off"
+                 value="${esc(Object.entries(data.metrics || {}).map(([k, v]) => `${k}=${v}`).join(", "))}" placeholder="cer=0.19, f1=0.8">
+        </div>
+        <div class="field">
+          <label for="nf-params">Parameters</label>
+          <input type="text" id="nf-params" name="parameters" autocomplete="off"
+                 value="${esc(Object.entries(data.parameters || {}).map(([k, v]) => `${k}=${v}`).join(", "))}" placeholder="learning_rate=0.0001, rank=16">
+        </div>
+      </div>
+      <div class="field">
+        <label for="nf-arch">Architecture</label>
+        <input type="text" id="nf-arch" name="architecture" autocomplete="off" value="${esc(data.architecture || "")}">
+      </div>
+    </div>
+    <div class="row2" data-for="artifact">
+      <div class="field">
+        <label for="nf-artifact-ref">Artifact reference</label>
+        <input type="text" id="nf-artifact-ref" name="artifact_ref" autocomplete="off" value="${esc(data.artifact_ref || "")}">
+      </div>
+      <div class="field">
+        <label for="nf-kind2">Kind</label>
+        <select id="nf-kind2" name="kind">
+          ${ARTIFACT_KINDS.map((value) => `<option value="${value}" ${value === (data.kind || "model") ? "selected" : ""}>${value}</option>`).join("")}
+        </select>
+      </div>
+    </div>
+    ${parentsField}
+    <div class="form-actions">
+      <button type="submit" class="primary">${editing ? "Save changes" : "Add node"}</button>
+      <button type="button" data-cancel="1">Cancel</button>
+      <span class="error" data-error></span>
+    </div>
+  </form>`;
+}
+
+function rootFormHtml() {
+  return `
+  <form class="inset" id="node-form">
+    <div class="field">
+      <label for="nf-title">What did you do first?</label>
+      <input type="text" id="nf-title" name="title" required autocomplete="off" placeholder="run the base model on sample IDs">
+    </div>
+    <div class="field">
+      <label for="nf-summary">Notes</label>
+      <textarea id="nf-summary" name="summary" placeholder="paths like /home/rookie/data become clickable"></textarea>
+    </div>
+    <div class="field">
+      <label for="nf-category">Category</label>
+      <input type="text" id="nf-category" name="category" autocomplete="off" value="planning">
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="primary">Create root action</button>
+      <button type="button" data-cancel="1">Cancel</button>
+      <span class="error" data-error></span>
+    </div>
+  </form>`;
+}
+
+function showTypeFields(form) {
+  const type = form.elements.type ? form.elements.type.value : "action";
+  form.querySelectorAll("[data-for]").forEach((block) => {
+    block.hidden = block.dataset.for !== type;
+  });
+}
+
+function collectNodeBody(form, type) {
+  const fields = form.elements;
+  const data = {};
+  if (type === "action") data.category = fields.category.value || "operation";
+  if (type === "dataset") { data.data_ref = fields.data_ref.value; data.split = fields.split.value; }
+  if (type === "experiment") {
+    data.model_name = fields.model_name.value;
+    data.mode = fields.mode.value;
+    data.architecture = fields.architecture.value;
+    data.metrics = parsePairs(fields.metrics.value);
+    data.parameters = parsePairs(fields.parameters.value);
+  }
+  if (type === "artifact") { data.artifact_ref = fields.artifact_ref.value; data.kind = fields.kind.value; }
+  return data;
+}
+
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("could not read that file"));
+    reader.onload = () => resolve(String(reader.result).split(",")[1] || "");
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ------------------------------------------------------------------ sections */
+
+const LOWER_IS_BETTER = ["loss", "error", "err", "cer", "wer", "mae", "mse", "rmse", "mape", "perplexity", "ppl"];
+const lowerIsBetter = (name) =>
+  name.toLowerCase().split(/[^a-z0-9]+/).some((token) => LOWER_IS_BETTER.includes(token));
+
+function metricsCard(metricSummary) {
+  const entries = Object.entries(metricSummary).filter(([name]) => !/support$/i.test(name));
+  if (!entries.length) return "";
+  return `
+  <section class="card">
+    <div class="card-head"><h2>Metric summary</h2>
+      <span class="hint">↓ marks metrics where smaller is better</span></div>
+    <div class="scroll"><table>
+      <thead><tr><th>Metric</th><th>Runs</th><th>Best</th><th>Average</th><th style="width:34%">Best vs average</th></tr></thead>
+      <tbody>${entries.map(([name, stats]) => {
+        const down = lowerIsBetter(name);
+        // How far the best run sits from the average, as a share of the pair.
+        const span = Math.max(Math.abs(stats.best), Math.abs(stats.average)) || 1;
+        const share = Math.min(100, Math.max(6, (Math.min(Math.abs(stats.best), Math.abs(stats.average)) / span) * 100));
+        return `
+        <tr>
+          <td><strong>${esc(name)}</strong>${down ? ' <span class="hint">↓</span>' : ""}</td>
+          <td>${esc(num(stats.count))}</td>
+          <td><strong>${esc(num(stats.best))}</strong></td>
+          <td class="sub">${esc(num(stats.average))}</td>
+          <td><div class="bar"><i style="width:${down ? 100 - share + 6 : share}%"></i></div></td>
+        </tr>`;
+      }).join("")}
+      </tbody>
+    </table></div>
+  </section>`;
+}
+
+function experimentsCard(nodes) {
+  const runs = nodes.filter((node) => node.type === "experiment");
+  if (!runs.length) {
+    return `<section class="card"><div class="card-head"><h2>Experiments</h2></div>
+      <p class="empty">No experiments yet. Add one under a node, or use <code>with writer.run(...)</code> from Python.</p></section>`;
+  }
+  const rows = runs.slice().reverse().map((node) => {
+    const data = node.data;
+    const datasets = Object.entries(data.dataset_roles || {}).map(([id, role]) =>
+      `<div><button class="chip plain" data-goto="${esc(id)}">${esc(nodeLabel(nodeById(id)) || id)}</button> ${esc(role)}</div>`).join("")
+      || '<span class="empty">-</span>';
+    return `
+    <tr>
+      <td style="white-space:nowrap">
+        <button class="chip" data-goto="${esc(node.id)}">${esc(node.id)}</button>
+        <div class="sub">${esc(when(node.created_at))}</div>
+        ${data.duration_seconds ? `<div class="sub">${esc(num(data.duration_seconds))}s</div>` : ""}
+      </td>
+      <td>
+        <span class="badge ${esc(data.status)}">${esc(data.status)}</span>
+        <span class="badge ${esc(data.mode)}">${esc(data.mode)}</span>
+        <div style="margin-top:4px"><strong>${esc(data.model_name || node.title)}</strong></div>
+        ${data.architecture ? `<div class="sub">${esc(data.architecture)}</div>` : ""}
+        ${data.error ? `<div class="error">${esc(data.error)}</div>` : ""}
+      </td>
+      <td>${datasets}</td>
+      <td>${pairs(data.metrics)}</td>
+      <td>${pairs(data.parameters, true)}</td>
+    </tr>`;
+  }).join("");
+  return `
+  <section class="card">
+    <div class="card-head"><h2>Experiments (${runs.length})</h2></div>
+    <div class="scroll"><table>
+      <thead><tr><th>Run</th><th>Model</th><th>Datasets</th><th>Metrics</th><th>Parameters</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+  </section>`;
+}
+
+function datasetsCard(nodes) {
+  const datasets = nodes.filter((node) => node.type === "dataset");
+  if (!datasets.length) {
+    return `<section class="card"><div class="card-head"><h2>Dataset versions</h2></div>
+      <p class="empty">No datasets yet.</p></section>`;
+  }
+  return `
+  <section class="card">
+    <div class="card-head"><h2>Dataset versions (${datasets.length})</h2></div>
+    <div class="scroll"><table>
+      <thead><tr><th>Dataset</th><th>Version</th><th>Split</th><th>Reference</th><th>Changes</th><th>Updated</th></tr></thead>
+      <tbody>${datasets.map((node) => `
+        <tr>
+          <td><button class="chip" data-goto="${esc(node.id)}">${esc(node.title)}</button></td>
+          <td>v${esc(node.data.version)}</td>
+          <td><span class="chip plain">${esc(node.data.split)}</span></td>
+          <td style="word-break:break-all">${refLink(node.data.data_ref || "")}</td>
+          <td class="sub">${(node.data.changes || []).length}</td>
+          <td class="sub">${esc(ago(node.updated_at))}</td>
+        </tr>`).join("")}
+      </tbody>
+    </table></div>
+  </section>`;
+}
+
+function artifactsCard(nodes) {
+  const artifacts = nodes.filter((node) => node.type === "artifact");
+  if (!artifacts.length) return "";
+  return `
+  <section class="card">
+    <div class="card-head"><h2>Artifacts (${artifacts.length})</h2></div>
+    <div class="scroll"><table>
+      <thead><tr><th>Name</th><th>Kind</th><th>Reference</th><th>Came from</th><th>Note</th></tr></thead>
+      <tbody>${artifacts.map((node) => `
+        <tr>
+          <td><button class="chip" data-goto="${esc(node.id)}">${esc(node.title)}</button></td>
+          <td><span class="chip plain">${esc(node.data.kind)}</span></td>
+          <td style="word-break:break-all">${refLink(node.data.artifact_ref || "")}</td>
+          <td>${(node.parents || []).map((id) => `<button class="chip plain" data-goto="${esc(id)}">${esc(id)}</button>`).join("")}</td>
+          <td class="sub">${esc(node.summary || "-")}</td>
+        </tr>`).join("")}
+      </tbody>
+    </table></div>
+  </section>`;
+}
+
+function utilityValue(value) {
+  if (Array.isArray(value)) return `<ul class="checklist">${value.map((item) => `<li>${esc(item)}</li>`).join("")}</ul>`;
+  if (value && typeof value === "object") {
+    return Object.entries(value).map(([key, inner]) =>
+      `<div><strong>${esc(key)}</strong>${utilityValue(inner)}</div>`).join("");
+  }
+  return `<div class="sub">${esc(value)}</div>`;
+}
+
+function utilitiesCard(utilities) {
+  const entries = Object.entries(utilities || {});
+  if (!entries.length) return "";
+  return `
+  <section class="card">
+    <div class="card-head"><h2>Utilities &amp; checklists</h2></div>
+    ${entries.map(([key, value]) => `<div style="margin-bottom:10px"><strong>${esc(key)}</strong>${utilityValue(value)}</div>`).join("")}
+  </section>`;
+}
+
+/* ------------------------------------------------------------------ wiring */
+
+function paint() {
+  const detail = state.detail;
+  const doc = detail.document;
+  document.getElementById("detail").innerHTML =
+    overview(detail.summary, detail.metric_summary) +
+    treeCard(detail.graph) +
+    selectedCard() +
+    metricsCard(detail.metric_summary) +
+    experimentsCard(doc.nodes) +
+    datasetsCard(doc.nodes) +
+    artifactsCard(doc.nodes) +
+    utilitiesCard(doc.utilities);
+  wire();
+}
+
+function wire() {
+  const host = document.getElementById("detail");
+
+  host.querySelectorAll("[data-node]").forEach((group) => {
+    const select = () => {
+      state.selected = state.selected === group.dataset.node ? null : group.dataset.node;
+      state.form = null;
+      paint();
+    };
+    group.onclick = select;
+    group.onkeydown = (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); select(); } };
+  });
+
+  host.querySelectorAll("[data-goto]").forEach((button) => {
+    button.onclick = () => { state.selected = button.dataset.goto; state.form = null; paint(); };
+  });
+
+  host.querySelectorAll("[data-open]").forEach((button) => {
+    button.onclick = async () => {
+      try {
+        const result = await api("api/open", "POST", { path: button.dataset.open });
+        toast(`Opened ${result.opened}`);
+      } catch (failure) {
+        toast(failure.message);
+      }
+    };
+  });
+
+  host.querySelectorAll("[data-detach]").forEach((button) => {
+    button.onclick = async () => {
+      try {
+        await api(`api/projects/${encodeURIComponent(state.slug)}/nodes/${encodeURIComponent(state.selected)}/attachments/${encodeURIComponent(button.dataset.detach)}`, "DELETE");
+        await load();
+      } catch (failure) {
+        toast(failure.message);
+      }
+    };
+  });
+
+  host.querySelectorAll("[data-form]").forEach((button) => {
+    button.onclick = () => {
+      const mode = button.dataset.form;
+      state.form = state.form?.mode === mode ? null : { mode };
+      paint();
+    };
+  });
+
+  const addRoot = host.querySelector("#add-root");
+  if (addRoot) {
+    addRoot.onclick = () => {
+      host.querySelector("#root-form-host").innerHTML = rootFormHtml();
+      wireNodeForm("root");
+    };
+  }
+
+  if (state.form && state.selected) {
+    const slot = host.querySelector("#node-form-host");
+    if (slot) {
+      slot.innerHTML = nodeFormHtml(state.form.mode, nodeById(state.selected));
+      wireNodeForm(state.form.mode);
+    }
+  }
+}
+
+function wireNodeForm(mode) {
+  const form = document.getElementById("node-form");
+  if (!form) return;
+  const fail = (message) => { form.querySelector("[data-error]").textContent = message; };
+
+  form.querySelector("[data-cancel]").onclick = () => { state.form = null; paint(); };
+
+  if (mode === "child" || mode === "edit") {
+    showTypeFields(form);
+    if (form.elements.type && !form.elements.type.disabled) {
+      form.elements.type.onchange = () => showTypeFields(form);
+    }
+  }
+  if (mode === "attach") {
+    const kind = form.elements.kind;
+    const swap = () => {
+      form.querySelector("#nf-upload-field").hidden = kind.value !== "upload";
+      form.querySelector("#nf-href-field").hidden = kind.value === "upload";
+    };
+    kind.onchange = swap;
+    swap();
+  }
+
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    const project = `api/projects/${encodeURIComponent(state.slug)}`;
+    try {
+      if (mode === "attach") {
+        const kind = form.elements.kind.value;
+        const label = form.elements.label.value;
+        const url = `${project}/nodes/${encodeURIComponent(state.selected)}/attachments`;
+        if (kind === "upload") {
+          const file = form.elements.file.files[0];
+          if (!file) return fail("choose a file first");
+          await api(url, "POST", {
+            type: "upload", filename: file.name, label,
+            content_base64: await readFileAsBase64(file),
+          });
+        } else {
+          await api(url, "POST", { type: kind, href: form.elements.href.value, label });
+        }
+      } else if (mode === "root") {
+        await api(`${project}/nodes`, "POST", {
+          type: "action", title: form.elements.title.value, parents: [],
+          summary: form.elements.summary.value,
+          data: { category: form.elements.category.value || "planning" },
+        });
+      } else {
+        const type = form.elements.type.value;
+        const picker = form.elements.parents;   // absent when editing the root
+        const body = { title: form.elements.title.value, summary: form.elements.summary.value };
+        if (picker) body.parents = [...picker.selectedOptions].map((option) => option.value);
+        if (mode === "child") {
+          await api(`${project}/nodes`, "POST", { ...body, type, data: collectNodeBody(form, type) });
+        } else {
+          await api(`${project}/nodes/${encodeURIComponent(state.selected)}`, "PATCH",
+                    { ...body, data: collectNodeBody(form, type) });
+        }
+      }
+      state.form = null;
+      await load();
+    } catch (failure) {
+      fail(failure.message);
+    }
+  };
+}
+
+async function renderDetail(slug) {
+  try {
+    state.detail = await api(`api/projects/${encodeURIComponent(slug)}`);
+  } catch (failure) {
+    document.getElementById("detail").innerHTML =
+      `<section class="card"><p class="empty">${esc(failure.message)}</p></section>`;
+    return;
+  }
+  if (state.selected && !nodeById(state.selected)) state.selected = null;
+  paint();
+}
+
+async function load() {
+  const payload = await api("api/projects");
+  state.projects = payload.projects;
+  state.canOpenPaths = !!payload.can_open_paths;
+  document.getElementById("root-label").textContent = payload.root;
+  await route();
+}
+
+async function route() {
+  const slug = decodeURIComponent(location.hash.replace(/^#/, ""));
+  const next = slug && state.projects.some((project) => project.slug === slug) ? slug : null;
+  if (next !== state.slug) { state.selected = null; state.form = null; }
+  state.slug = next;
+  renderList();
+  if (state.slug) await renderDetail(state.slug); else renderPlaceholder();
+}
+
+document.getElementById("refresh").onclick = load;
+document.getElementById("new-project").onclick = () =>
+  renderNewProjectForm(!document.getElementById("create-form"));
+document.getElementById("filter").oninput = (event) => { state.filter = event.target.value; renderList(); };
+window.addEventListener("hashchange", route);
+load();
+</script>
+</body>
+</html>

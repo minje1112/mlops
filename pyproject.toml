@@ -5,9 +5,18 @@ description = "Lightweight personal MLOps document writer"
 readme = "README.md"
 requires-python = ">=3.10"
 
+[project.scripts]
+mlops-web = "mlops.web:main"
+
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["mlops"]
+
+[tool.setuptools.package-data]
+mlops = ["static/*.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
