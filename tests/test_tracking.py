@@ -144,6 +144,54 @@ def test_add_training_run_still_accepts_hyperparameters(writer):
     assert run["id"] == "exp-001"
 
 
+def test_a_finished_experiment_can_be_reopened_and_added_to(writer):
+    with writer.run("lightgbm", "train", parameters={"learning_rate": 0.05}) as run:
+        run.log_metrics(token_acc=0.81)
+    node = writer.experiments[0]
+    created = node["created_at"]
+
+    # Results measured after the run merge in rather than replacing.
+    later = writer.log_into(node["id"])
+    later.log_metrics(tag_acc=0.74, tree_edit_dist=0.21)
+    later.log_params(epochs=3)
+    later.log_artifact("doctag-model", "/tmp/doctag_model_v6")
+
+    assert node["data"]["metrics"] == {"token_acc": 0.81, "tag_acc": 0.74, "tree_edit_dist": 0.21}
+    assert node["data"]["parameters"] == {"learning_rate": 0.05, "epochs": 3}
+    assert node["updated_at"] > created
+    assert writer.artifact_nodes[0]["parents"] == [node["id"]]
+
+    with pytest.raises(ValueError, match="not an experiment"):
+        writer.log_into("act-001")
+    with pytest.raises(KeyError):
+        writer.log_into("exp-404")
+
+
+def test_editing_an_experiment_replaces_the_field_it_is_given(writer):
+    run = writer.add_training_run("xgboost", "train", metrics={"token_acc": 0.8, "tag_acc": 0.7})
+
+    # edit_node is a whole-field set, which is what a form submit wants...
+    writer.edit_node(run, metrics={"token_acc": 0.9})
+    assert run["data"]["metrics"] == {"token_acc": 0.9}
+
+    # ...while log_into merges, which is what a later measurement wants.
+    writer.log_into(run).log_metrics(tag_acc=0.75)
+    assert run["data"]["metrics"] == {"token_acc": 0.9, "tag_acc": 0.75}
+
+
+def test_experiment_status_is_settable_and_validated(writer):
+    run = writer.add_experiment("granite", parents="act-001", mode="finetune", status="failed")
+    assert run["data"]["status"] == "failed"
+
+    writer.edit_node(run, status="completed")
+    assert run["data"]["status"] == "completed"
+
+    with pytest.raises(ValueError, match="experiment status"):
+        writer.add_experiment("x", parents="act-001", status="exploded")
+    with pytest.raises(ValueError, match="experiment status"):
+        writer.edit_node(run, status="exploded")
+
+
 def test_evaluation_mode_experiments_can_precede_any_dataset():
     project = MLOpsWriter(project_name="finetune")
     root = project.add_action("kickoff", "scope the fine-tune")

@@ -268,6 +268,48 @@ def test_editing_the_root_node_over_http(docs_root):
         httpd.server_close()
 
 
+def test_editing_an_experiment_keeps_what_it_did_not_touch(docs_root):
+    """The dashboard's Edit form posts every field; the machine-recorded ones must survive."""
+    writer = load_project("churn-prediction", docs_root)
+    try:
+        with writer.run("granite", "train", mode="finetune", parameters={"lr": 2e-05, "bf16": True}) as run:
+            run.log_params(adapter=None, epochs=10)
+            raise RuntimeError("CUBLAS_STATUS_EXECUTION_FAILED")
+    except RuntimeError:
+        pass
+    writer.save(docs_root)
+    node_id = writer.experiments[-1]["id"]
+
+    httpd, base = serve(docs_root)
+    try:
+        status, edited = call(base, f"/api/projects/churn-prediction/nodes/{node_id}", "PATCH", {
+            "title": "granite", "summary": "bf16 GEMM died, retry with --fp16",
+            "data": {"model_name": "granite", "mode": "finetune", "status": "failed",
+                     "architecture": "LoRA r=32",
+                     "metrics": {},
+                     "parameters": {"lr": 2e-05, "bf16": True, "adapter": None, "epochs": 10}},
+        })
+        assert status == 200
+        data = edited["node"]["data"]
+        assert edited["node"]["summary"] == "bf16 GEMM died, retry with --fp16"
+        assert data["parameters"] == {"lr": 2e-05, "bf16": True, "adapter": None, "epochs": 10}
+        # untouched machine-recorded fields
+        assert data["error"].startswith("RuntimeError: CUBLAS")
+        assert data["environment"]["python"]
+        assert data["duration_seconds"] >= 0
+        assert data["dataset_roles"]
+
+        # status is editable, and validated
+        assert call(base, f"/api/projects/churn-prediction/nodes/{node_id}", "PATCH",
+                    {"data": {"status": "completed"}})[0] == 200
+        code, body = call(base, f"/api/projects/churn-prediction/nodes/{node_id}", "PATCH",
+                          {"data": {"status": "exploded"}})
+        assert (code, "experiment status" in body["error"]) == (400, True)
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
 def test_node_endpoints_enforce_the_graph_rules(docs_root):
     httpd, base = serve(docs_root)
     try:

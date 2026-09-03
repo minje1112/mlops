@@ -7,7 +7,7 @@ from typing import Any
 # Error rates and losses are better when they are smaller.
 LOWER_IS_BETTER = {
     "loss", "error", "err", "cer", "wer", "mae", "mse", "rmse", "mape",
-    "perplexity", "ppl", "regret", "latency", "drift",
+    "perplexity", "ppl", "regret", "latency", "drift", "dist", "distance",
 }
 
 

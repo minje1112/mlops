@@ -1,8 +1,4 @@
 """The node graph: every piece of work is a node that names where it came from.
-
-A project is one DAG. The first node created is the root and has no parents;
-every later node must name at least one existing parent, because an experiment
-is only meaningful next to the work it grew out of.
 """
 
 from __future__ import annotations
@@ -13,6 +9,7 @@ from typing import Any, Iterable, Sequence
 
 NODE_TYPES = ("action", "note", "dataset", "experiment", "artifact")
 EXPERIMENT_MODES = ("evaluation", "training", "finetune")
+EXPERIMENT_STATUSES = ("running", "completed", "failed")
 DATASET_SPLITS = ("raw", "train", "validation", "test", "features", "other")
 ARTIFACT_KINDS = ("model", "export", "report", "deployment")
 ATTACHMENT_TYPES = ("image", "pdf", "file", "link", "path")

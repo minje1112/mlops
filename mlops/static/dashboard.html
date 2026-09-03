@@ -434,6 +434,7 @@ const state = {
 const NODE_TYPES = ["action", "note", "dataset", "experiment", "artifact"];
 const SPLITS = ["raw", "train", "validation", "test", "features", "other"];
 const MODES = ["evaluation", "training", "finetune"];
+const STATUSES = ["running", "completed", "failed"];
 const ARTIFACT_KINDS = ["model", "export", "report", "deployment"];
 const PRIMARY_METRICS = ["cer", "wer", "pr_auc", "roc_auc", "auc", "ndcg", "f1", "accuracy", "recall", "precision"];
 
@@ -483,7 +484,13 @@ function ago(iso) {
 }
 
 function num(value) {
-  if (typeof value === "number") return Number.isInteger(value) ? value : Number(value.toFixed(4));
+  if (typeof value === "number") {
+    if (Number.isInteger(value)) return value;
+    // toFixed(4) would render a 2e-5 learning rate as 0, so keep small
+    // magnitudes on significant figures instead of decimal places.
+    if (Math.abs(value) < 0.001) return Number(value.toPrecision(3));
+    return Number(value.toFixed(4));
+  }
   if (value && typeof value === "object") return JSON.stringify(value);
   return value;
 }
@@ -506,17 +513,32 @@ function pairs(object, plain) {
 }
 
 function parsePairs(text) {
-  // "learning_rate=0.05, num_leaves=64" -> {learning_rate: 0.05, num_leaves: 64}
+  // One "key = value" per line. Values are read as JSON where they parse, so
+  // true/false/null/numbers keep their type and everything else is a string.
   const out = {};
-  String(text || "").split(/[,\n]/).forEach((part) => {
-    const index = part.indexOf("=");
+  String(text || "").split("\n").forEach((line) => {
+    const index = line.indexOf("=");
     if (index < 1) return;
-    const key = part.slice(0, index).trim();
-    const raw = part.slice(index + 1).trim();
+    const key = line.slice(0, index).trim();
+    const raw = line.slice(index + 1).trim();
     if (!key) return;
-    out[key] = raw !== "" && !isNaN(Number(raw)) ? Number(raw) : raw;
+    try { out[key] = JSON.parse(raw); } catch { out[key] = raw; }
   });
   return out;
+}
+
+function renderPairs(object) {
+  // Inverse of parsePairs. A string that would parse as something else is
+  // quoted so the round-trip cannot silently change its type.
+  return Object.entries(object || {}).map(([key, value]) => {
+    let text;
+    if (typeof value === "string") {
+      try { JSON.parse(value); text = JSON.stringify(value); } catch { text = value; }
+    } else {
+      text = JSON.stringify(value);
+    }
+    return `${key} = ${text}`;
+  }).join("\n");
 }
 
 function nodeById(id) {
@@ -627,8 +649,11 @@ function headlineMetric(metricSummary) {
   const names = Object.keys(metricSummary).filter((name) => !/support$/i.test(name));
   if (!names.length) return null;
   const rank = (name) => {
-    const index = PRIMARY_METRICS.findIndex((known) => name.toLowerCase().includes(known));
-    return index < 0 ? PRIMARY_METRICS.length : index;
+    const lower = name.toLowerCase();
+    const index = PRIMARY_METRICS.findIndex((known) => lower.includes(known));
+    if (index >= 0) return index;
+    // A raw loss headlines a project only when nothing better was recorded.
+    return /(^|[^a-z])loss([^a-z]|$)/.test(lower) ? PRIMARY_METRICS.length + 1 : PRIMARY_METRICS.length;
   };
   const chosen = names.slice().sort((a, b) => rank(a) - rank(b))[0];
   return [chosen, metricSummary[chosen]];
@@ -1006,20 +1031,31 @@ function nodeFormHtml(mode, node) {
       </div>
       <div class="row2">
         <div class="field">
-          <label for="nf-metrics">Metrics</label>
-          <input type="text" id="nf-metrics" name="metrics" autocomplete="off"
-                 value="${esc(Object.entries(data.metrics || {}).map(([k, v]) => `${k}=${v}`).join(", "))}" placeholder="cer=0.19, f1=0.8">
+          <label for="nf-arch">Architecture</label>
+          <input type="text" id="nf-arch" name="architecture" autocomplete="off" value="${esc(data.architecture || "")}">
         </div>
         <div class="field">
-          <label for="nf-params">Parameters</label>
-          <input type="text" id="nf-params" name="parameters" autocomplete="off"
-                 value="${esc(Object.entries(data.parameters || {}).map(([k, v]) => `${k}=${v}`).join(", "))}" placeholder="learning_rate=0.0001, rank=16">
+          <label for="nf-status">Status</label>
+          <select id="nf-status" name="status">
+            ${STATUSES.map((value) => `<option value="${value}" ${value === (data.status || "completed") ? "selected" : ""}>${value}</option>`).join("")}
+          </select>
         </div>
       </div>
       <div class="field">
-        <label for="nf-arch">Architecture</label>
-        <input type="text" id="nf-arch" name="architecture" autocomplete="off" value="${esc(data.architecture || "")}">
+        <label for="nf-metrics">Metrics <span class="hint">one per line</span></label>
+        <textarea id="nf-metrics" name="metrics" rows="4"
+                  placeholder="val_token_acc = 0.883&#10;val_loss = 0.41">${esc(renderPairs(data.metrics))}</textarea>
       </div>
+      <div class="field">
+        <label for="nf-params">Parameters <span class="hint">one per line</span></label>
+        <textarea id="nf-params" name="parameters" rows="8"
+                  placeholder="lr = 0.00002&#10;epochs = 10&#10;bf16 = true">${esc(renderPairs(data.parameters))}</textarea>
+      </div>
+      ${editing && data.error ? `<div class="field">
+        <label>Recorded failure</label>
+        <div class="error" style="white-space:pre-wrap">${esc(data.error)}</div>
+        <div class="hint">Kept as the machine recorded it. Put your own commentary in Notes.</div>
+      </div>` : ""}
     </div>
     <div class="row2" data-for="artifact">
       <div class="field">
@@ -1080,6 +1116,7 @@ function collectNodeBody(form, type) {
   if (type === "experiment") {
     data.model_name = fields.model_name.value;
     data.mode = fields.mode.value;
+    data.status = fields.status.value;
     data.architecture = fields.architecture.value;
     data.metrics = parsePairs(fields.metrics.value);
     data.parameters = parsePairs(fields.parameters.value);
@@ -1099,7 +1136,8 @@ function readFileAsBase64(file) {
 
 /* ------------------------------------------------------------------ sections */
 
-const LOWER_IS_BETTER = ["loss", "error", "err", "cer", "wer", "mae", "mse", "rmse", "mape", "perplexity", "ppl"];
+const LOWER_IS_BETTER = ["loss", "error", "err", "cer", "wer", "mae", "mse", "rmse", "mape",
+                         "perplexity", "ppl", "regret", "latency", "drift", "dist", "distance"];
 const lowerIsBetter = (name) =>
   name.toLowerCase().split(/[^a-z0-9]+/).some((token) => LOWER_IS_BETTER.includes(token));
 

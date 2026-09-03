@@ -238,6 +238,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                     parameters=data.get("parameters") or {},
                     architecture=str(data.get("architecture", "")),
                     notes=str(payload.get("summary", "")), title=title,
+                    status=str(data.get("status", "completed")),
                 )
             elif node_type == "artifact":
                 node = writer.add_artifact(

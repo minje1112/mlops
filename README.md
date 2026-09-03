@@ -140,6 +140,61 @@ with writer.run("lightgbm", "train", architecture="gbdt, 64 leaves") as run:
 metrics for. Note that both paths store settings under the run's `parameters`
 key (the `hyperparameters=` argument is still accepted and merged into it).
 
+### Adding to a run after it finished
+
+Scored a checkpoint the next day? Re-open the experiment and log into it — the
+same handle, with merge semantics, so new numbers add to what is there:
+
+```python
+run = writer.log_into("exp-001")
+run.log_metrics(holdout_tag_acc=0.77)
+run.log_artifact("doctag-v6", "/path/to/output_dir")
+writer.save()
+```
+
+Use `writer.edit_node("exp-001", metrics={...})` instead when you mean to
+*replace* a field outright — that is what the dashboard's Edit button does.
+
+## Importing a Weights & Biases run
+
+A run that crashed records only the exception, while W&B still holds every metric
+logged before it died. Pull one into a node:
+
+```bash
+# from the local run directory — no network, no wandb package needed
+python3 -m mlops.integrations.wandb wandb/run-20260902_111641-niqajvlo \
+    --project granite-docling --parents ds-001
+
+# or through the API, by run path or URL (needs the wandb package)
+python3 -m mlops.integrations.wandb mmsuren0909/Docling-Restart/niqajvlo \
+    --project granite-docling --parents ds-001
+```
+
+```python
+from mlops import load_project
+from mlops.integrations.wandb import import_run
+
+writer = load_project("granite-docling")
+import_run(writer, "wandb/run-20260902_111641-niqajvlo", parents="ds-001")
+writer.save()
+```
+
+What comes across: the run's command line as parameters, its summary as metrics,
+runtime as duration, and Python / OS / GPU / CUDA / git commit as environment. The
+W&B run URL is attached as a link when the source knows it.
+
+Re-importing the same run **updates its node** rather than adding a second one, so
+a run can be pulled again once it finishes. A local directory has no authoritative
+final state, so the importer only claims `failed` when the console log ends in an
+exception, and otherwise leaves the status alone — a status your training script
+recorded first-hand is never overwritten by a guess. Pass `--mode` to override the
+guess from `--lora`, and `--include-config` to also record the run's full config
+rather than just its command line.
+
+Throughput counters the Trainer logs beside real results — `*_runtime`,
+`*_samples_per_second`, `*_steps_per_second`, `total_flos` — are dropped, since a
+"best total_flos" across runs means nothing. `--keep-throughput` retains them.
+
 ## Walking the graph
 
 ```python

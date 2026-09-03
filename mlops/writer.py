@@ -13,7 +13,7 @@ from urllib.parse import urlparse
 
 from . import nodes as nodes_mod
 from .metrics import evaluate
-from .nodes import ARTIFACT_KINDS, DATASET_SPLITS, EXPERIMENT_MODES
+from .nodes import ARTIFACT_KINDS, DATASET_SPLITS, EXPERIMENT_MODES, EXPERIMENT_STATUSES
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}
 
@@ -221,20 +221,30 @@ class RunLogger:
         """The experiment payload (parameters, metrics, status, ...)."""
         return self.node["data"]
 
+    def _touch(self) -> None:
+        self.node["updated_at"] = _timestamp()
+
     def log_params(self, params: dict[str, Any] | None = None, **kwargs: Any) -> dict[str, Any]:
         """Record hyperparameters, learning rate, or any other run setting."""
         self.node["data"]["parameters"].update(params or {})
         self.node["data"]["parameters"].update(kwargs)
+        self._touch()
         return self.node["data"]["parameters"]
 
     def set_architecture(self, architecture: str) -> None:
         """Record the architecture choice behind this run."""
         self.node["data"]["architecture"] = architecture
+        self._touch()
 
     def log_metrics(self, metrics: dict[str, float] | None = None, **kwargs: Any) -> dict[str, float]:
-        """Record evaluation metrics as they become available."""
+        """Record evaluation metrics as they become available.
+
+        Metrics are merged, so results measured later add to what is there
+        rather than replacing it.
+        """
         self.node["data"]["metrics"].update(metrics or {})
         self.node["data"]["metrics"].update(kwargs)
+        self._touch()
         return self.node["data"]["metrics"]
 
     def log_evaluation(
@@ -405,6 +415,8 @@ class MLOpsWriter:
         elif node_type == "experiment":
             if "mode" in data and data["mode"] not in EXPERIMENT_MODES:
                 raise ValueError(f"experiment mode must be one of {', '.join(EXPERIMENT_MODES)}")
+            if "status" in data and data["status"] not in EXPERIMENT_STATUSES:
+                raise ValueError(f"experiment status must be one of {', '.join(EXPERIMENT_STATUSES)}")
         elif node_type == "artifact":
             if "kind" in data and data["kind"] not in ARTIFACT_KINDS:
                 raise ValueError(f"artifact kind must be one of {', '.join(ARTIFACT_KINDS)}")
@@ -607,6 +619,24 @@ class MLOpsWriter:
             dataset_roles=roles,
         )
 
+    def log_into(self, node: str | dict[str, Any]) -> RunLogger:
+        """Re-open a finished experiment to add parameters, metrics or artifacts.
+
+        Returns the same handle :meth:`run` yields, so results measured after
+        training — a later evaluation, a checkpoint you scored the next day —
+        merge into the run instead of replacing what is already recorded.
+
+        >>> run = writer.log_into("exp-001")
+        >>> run.log_metrics(test_tag_acc=0.91)
+        >>> writer.save()
+        """
+        entry = self.get_node(node)
+        if entry["type"] != "experiment":
+            raise ValueError(f"{entry['id']} is a {entry['type']} node, not an experiment")
+        entry["data"].setdefault("parameters", {})
+        entry["data"].setdefault("metrics", {})
+        return RunLogger(self, entry)
+
     def add_experiment(
         self,
         model_name: str,
@@ -619,11 +649,14 @@ class MLOpsWriter:
         architecture: str = "",
         notes: str = "",
         title: str | None = None,
+        status: str = "completed",
     ) -> dict[str, Any]:
         """Record an experiment you already have results for."""
+        if status not in EXPERIMENT_STATUSES:
+            raise ValueError(f"experiment status must be one of {', '.join(EXPERIMENT_STATUSES)}")
         node = self._new_experiment(
             model_name, dataset, datasets, parents, mode, architecture,
-            parameters, notes, "completed", title,
+            parameters, notes, status, title,
         )
         node["data"]["metrics"] = dict(metrics or {})
         return node
