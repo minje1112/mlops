@@ -80,7 +80,7 @@ def save_project(writer: "MLOpsWriter", root: str | Path | None = None) -> Path:
 
 def last_activity(document: dict[str, Any]) -> str:
     """Most recent timestamp anywhere in the document (ISO-8601 sorts lexically)."""
-    stamps = [document.get("created_at", "")]
+    stamps = [document.get("created_at", ""), document.get("draft_updated_at", "")]
     for node in document.get("nodes", []):
         stamps += [node.get("created_at", ""), node.get("updated_at", "")]
         stamps += [item.get("added_at", "") for item in node.get("attachments", [])]

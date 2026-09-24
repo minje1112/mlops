@@ -165,10 +165,18 @@ logged before it died. Pull one into a node:
 python3 -m mlops.integrations.wandb wandb/run-20260902_111641-niqajvlo \
     --project granite-docling --parents ds-001
 
-# or through the API, by run path or URL (needs the wandb package)
-python3 -m mlops.integrations.wandb mmsuren0909/Docling-Restart/niqajvlo \
-    --project granite-docling --parents ds-001
+# or through the API (needs the wandb package). entity/project/run_id, the run
+# URL, and the path copied out of the address bar all work:
+python3 -m mlops.integrations.wandb my-team/Docling-Restart/19hgozfy \
+    --project granite-docling --parents ds-003,exp-003
 ```
+
+The entity is whoever **owns** the run: for a team run that is the team, not your
+username, so copy it from the run's URL rather than assuming it is your login.
+
+A run only has a local directory on the machine that produced it. Point at a
+`wandb/run-*` path that does not exist and the importer says so, instead of
+reading your filesystem path as a W&B run path.
 
 ```python
 from mlops import load_project
@@ -194,6 +202,23 @@ rather than just its command line.
 Throughput counters the Trainer logs beside real results — `*_runtime`,
 `*_samples_per_second`, `*_steps_per_second`, `total_flos` — are dropped, since a
 "best total_flos" across runs means nothing. `--keep-throughput` retains them.
+
+## The side note
+
+Every project has one free-text scratchpad that is **not** a node: the thinking
+that has no place in the graph yet, a pasted metric block, a reminder for next
+time. It lives in the project JSON as `draft`, so it travels with the document
+and reaches the markdown export, but it never appears in the tree, the counts or
+the lineage.
+
+In the dashboard it is the sticky note beside the root node — tap it to read or
+write, Ctrl/Cmd+Enter to save. A dot on the sticky means there is something in it.
+
+```python
+writer.set_draft("mixed30 beat textonly.\n\nnext: try r=64")
+writer.draft, writer.draft_updated_at
+writer.set_draft("")          # clearing it also drops the timestamp
+```
 
 ## Walking the graph
 
@@ -248,7 +273,17 @@ python3 -m mlops.web --root mlops_docs --port 8787
 Then open http://127.0.0.1:8787. The left column lists your projects (filterable,
 most recently active first) with a **+ New** button to create one.
 
-Selecting a project draws its **tree**, top-down from the root. Click any node to
+Selecting a project draws its **tree**, top-down from the root. The layout is
+layered: an edge that spans more than one row is routed down its own reserved
+lane instead of cutting across the boxes in between, rows are ordered to reduce
+crossings, and a node with several parents receives them at separate points along
+its edge rather than at a single pinch.
+
+Edges are drawn as right angles rather than sweeping curves, which is far easier
+to follow where several share the space between two rows. An edge that crosses
+more than one row is real but secondary, so it is drawn thinner, paler and
+behind — hover any edge to light its whole path, or select a node to light its
+ancestry. Nothing is hidden. Click any node to
 select it: its whole origin chain lights up, everything unrelated dims, and a
 panel opens with its fields, notes, attachments, and the nodes it came from and
 led to. From there:
@@ -281,6 +316,11 @@ Projects written before the tree existed are converted automatically when they
 load: the earliest action becomes the root, and the lineage that was implied by
 `derived_from` and `run_id` becomes real parent links. The file on disk is
 rewritten in node form the next time you save.
+
+The page is re-read from disk on every request, but the routes live in the
+running process — so a dashboard newer than the server would otherwise fail with
+a bare "not found". The server reports an API version and the page shows a banner
+telling you to restart when it is behind.
 
 The server is standard-library only and binds to localhost by default. `--port 0`
 picks a free port; `--host 0.0.0.0` exposes it on your network — note that it can

@@ -310,6 +310,45 @@ def test_editing_an_experiment_keeps_what_it_did_not_touch(docs_root):
         httpd.server_close()
 
 
+def test_the_side_note_is_saved_without_touching_the_graph(docs_root):
+    httpd, base = serve(docs_root)
+    try:
+        before = project_detail("churn-prediction", docs_root)
+        status, body = call(base, "/api/projects/churn-prediction", "PATCH",
+                            {"draft": "pasted from the run page\n  eval/loss 0.083"})
+        assert status == 200
+        assert body["draft"].startswith("pasted from the run page")
+        assert body["draft_updated_at"]
+
+        after = project_detail("churn-prediction", docs_root)
+        assert after["document"]["draft"] == body["draft"]
+        # the side note is not a node, so nothing about the graph moves
+        assert after["summary"]["counts"] == before["summary"]["counts"]
+        assert [n["id"] for n in after["graph"]["nodes"]] == [n["id"] for n in before["graph"]["nodes"]]
+        # ...but it does count as activity
+        assert after["summary"]["last_activity"] > before["summary"]["last_activity"]
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
+def test_the_side_note_endpoint_validates_its_input(docs_root):
+    httpd, base = serve(docs_root)
+    try:
+        assert call(base, "/api/projects/churn-prediction", "PATCH", {"draft": 42})[0] == 400
+        assert call(base, "/api/projects/churn-prediction", "PATCH", {})[0] == 400
+        assert call(base, "/api/projects/churn-prediction", "PATCH",
+                    {"draft": "x" * (64 * 1024 + 1)})[0] == 413
+        assert call(base, "/api/projects/missing", "PATCH", {"draft": "x"})[0] == 404
+
+        # the same route also edits the objective
+        status, body = call(base, "/api/projects/churn-prediction", "PATCH", {"objective": "lift recall"})
+        assert (status, body["objective"]) == (200, "lift recall")
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+
+
 def test_node_endpoints_enforce_the_graph_rules(docs_root):
     httpd, base = serve(docs_root)
     try:

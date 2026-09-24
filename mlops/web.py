@@ -38,7 +38,13 @@ from .store import (
 from .utils import summarize_metrics
 
 DASHBOARD = Path(__file__).parent / "static" / "dashboard.html"
+# The page is re-read from disk on every request, but this module lives in the
+# running process. Bump this whenever routes change so a dashboard newer than
+# the server can say so instead of failing with a bare "not found".
+API_VERSION = 2
 MAX_BODY_BYTES = 256 * 1024
+# The project side note is free text, so give it room without being unbounded.
+MAX_DRAFT_CHARS = 64 * 1024
 # Uploads are base64 in a JSON body, which costs about a third on top.
 MAX_UPLOAD_BODY_BYTES = MAX_ATTACHMENT_BYTES * 4 // 3 + 64 * 1024
 
@@ -114,6 +120,7 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 "root": str(self.root.resolve()),
                 "projects": list_projects(self.root),
                 "can_open_paths": self._can_open(),
+                "api_version": API_VERSION,
             })
         elif path.startswith("/api/attachments/"):
             self._send_attachment(path[len("/api/attachments/"):])
@@ -157,6 +164,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
 
     def _route_patch(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
         parts = self._segments(path)
+        if len(parts) == 1:
+            return self._edit_project(parts[0], payload)
         if len(parts) == 3 and parts[1] == "actions":
             return self._edit_action(parts[0], parts[2], payload)
         if len(parts) == 3 and parts[1] == "nodes":
@@ -182,6 +191,30 @@ class DashboardHandler(BaseHTTPRequestHandler):
         except ValueError as error:
             raise ApiError(str(error)) from error
         return {"slug": project_slug(writer.project_name), "project_name": writer.project_name}
+
+    def _edit_project(self, slug: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """Project-level fields that are not part of the node graph."""
+        writer = self._load(slug)
+        changed = False
+        if "draft" in payload:
+            draft = payload["draft"]
+            if not isinstance(draft, str):
+                raise ApiError("draft must be text")
+            if len(draft) > MAX_DRAFT_CHARS:
+                raise ApiError(f"draft is longer than {MAX_DRAFT_CHARS} characters", status=413)
+            writer.set_draft(draft)
+            changed = True
+        if "objective" in payload:
+            writer.objective = str(payload["objective"])
+            changed = True
+        if not changed:
+            raise ApiError("nothing to change")
+        writer.save(self.root)
+        return {
+            "draft": writer.draft,
+            "draft_updated_at": writer.draft_updated_at,
+            "objective": writer.objective,
+        }
 
     def _add_action(self, slug: str, payload: dict[str, Any]) -> dict[str, Any]:
         writer = self._load(slug)

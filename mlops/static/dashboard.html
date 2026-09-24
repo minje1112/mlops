@@ -311,9 +311,38 @@
 
   /* non-scaling-stroke keeps lines a real pixel wide when a wide tree is
      scaled down to fit the card, instead of thinning away to nothing. */
-  .tree .edge { stroke: var(--edge); stroke-width: 1.8; fill: none; vector-effect: non-scaling-stroke; }
-  .tree .edge.on { stroke: var(--accent); stroke-width: 2.6; stroke-dasharray: 7 5; animation: flow 1.1s linear infinite; }
-  .tree .edge.off { opacity: .25; }
+  .tree .sticky { cursor: pointer; }
+  .tree .sticky rect {
+    fill: var(--note-soft); stroke: var(--note); stroke-width: 1.2;
+    transition: stroke-width .18s var(--ease), filter .18s var(--ease);
+  }
+  .tree .sticky:hover rect { stroke-width: 2.2; filter: url(#lift); }
+  .tree .sticky .dot { fill: var(--note); stroke: var(--panel); stroke-width: 2; }
+  form.sticky-note {
+    background: var(--note-soft);
+    border-color: color-mix(in srgb, var(--note) 34%, transparent);
+  }
+  form.sticky-note textarea {
+    background: var(--panel); min-height: 150px;
+    font: inherit; font-size: 14px; line-height: 1.6;
+  }
+
+  .tree .edge {
+    stroke: var(--edge); stroke-width: 1.8; fill: none;
+    stroke-linecap: round; stroke-linejoin: round;
+    vector-effect: non-scaling-stroke;
+    transition: stroke .18s var(--ease), stroke-width .18s var(--ease), opacity .18s var(--ease);
+  }
+  /* An edge crossing several rows is real but secondary: let the local
+     structure read first, and bring it forward on hover or selection. */
+  .tree .edge.far { stroke-width: 1.4; opacity: .55; }
+  .tree .edge.on { stroke: var(--accent); stroke-width: 2.6; opacity: 1; }
+  .tree .edge.off { opacity: .2; }
+  .tree .edge-hit {
+    stroke: transparent; stroke-width: 14; fill: none;
+    vector-effect: non-scaling-stroke; pointer-events: stroke; cursor: crosshair;
+  }
+  .tree .edge-group:hover .edge { stroke: var(--accent); stroke-width: 2.8; opacity: 1; }
   .tree marker#arrow path { fill: var(--edge); }
   .tree marker#arrow-on path { fill: var(--accent); }
 
@@ -379,6 +408,14 @@
   }
 
   /* ----------------------------------------------------------------- toast */
+  #stale {
+    display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;
+    margin: 0; padding: 11px 22px; font-size: 13px;
+    background: var(--note-soft); color: var(--note);
+    border-bottom: 1px solid color-mix(in srgb, var(--note) 34%, transparent);
+  }
+  #stale code { background: var(--panel); padding: 2px 7px; border-radius: 6px; color: var(--text); }
+
   #toast {
     position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
     background: var(--panel); border: 1px solid var(--border-strong); border-radius: 12px;
@@ -390,7 +427,6 @@
   /* ---------------------------------------------------------------- motion */
   @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
   @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
-  @keyframes flow { to { stroke-dashoffset: -24; } }
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
     *, *::before, *::after { animation: none !important; transition: none !important; }
@@ -411,6 +447,8 @@
   <button id="refresh">↻ Refresh</button>
 </header>
 
+<div id="stale" hidden></div>
+
 <div class="layout">
   <aside>
     <div class="aside-head">
@@ -428,6 +466,7 @@ const state = {
   projects: [], slug: null, filter: "", detail: null,
   selected: null,       // node id whose detail panel is open
   form: null,           // {mode: "child"|"edit"|"attach", nodeId}
+  draftOpen: false,     // the project's side note panel
   canOpenPaths: false,
 };
 
@@ -436,6 +475,8 @@ const SPLITS = ["raw", "train", "validation", "test", "features", "other"];
 const MODES = ["evaluation", "training", "finetune"];
 const STATUSES = ["running", "completed", "failed"];
 const ARTIFACT_KINDS = ["model", "export", "report", "deployment"];
+// Routes this page needs. If the running server reports less, it is stale.
+const NEEDS_API = 2;
 const PRIMARY_METRICS = ["cer", "wer", "pr_auc", "roc_auc", "auc", "ndcg", "f1", "accuracy", "recall", "precision"];
 
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) =>
@@ -648,10 +689,16 @@ function headlineMetric(metricSummary) {
   // "support" is a row count, not a score, so it never headlines the project.
   const names = Object.keys(metricSummary).filter((name) => !/support$/i.test(name));
   if (!names.length) return null;
+  // Progress counters a trainer logs beside real results: how far the run got,
+  // not how well it did. "Best epoch 10" tells you nothing.
+  // Matched as whole names, not word tokens: splitting on "_" would turn
+  // grad_norm into "grad" + "norm" and miss it.
+  const COUNTER = /(^|[^a-z])(epochs?|steps?|global_step|grad_norm|learning_rate|lr|flos)([^a-z]|$)/;
   const rank = (name) => {
     const lower = name.toLowerCase();
     const index = PRIMARY_METRICS.findIndex((known) => lower.includes(known));
     if (index >= 0) return index;
+    if (COUNTER.test(lower)) return PRIMARY_METRICS.length + 2;
     // A raw loss headlines a project only when nothing better was recorded.
     return /(^|[^a-z])loss([^a-z]|$)/.test(lower) ? PRIMARY_METRICS.length + 1 : PRIMARY_METRICS.length;
   };
@@ -682,43 +729,151 @@ const TYPE_ICON = {
   action: "🎯", note: "📝", dataset: "🗃️", experiment: "🧪", artifact: "📦",
 };
 
-function layout(nodes, depths) {
-  const W = 214, H = 70, GAP_X = 26, GAP_Y = 58, PAD = 18;
+function layout(nodes, depths, edges) {
+  // A layered (Sugiyama-style) pass: edges that span more than one row get
+  // dummy waypoints so they travel down their own lane instead of cutting
+  // through the boxes in between, and rows are ordered to reduce crossings.
+  const W = 214, H = 70, LANE = 18, GAP_X = 26, GAP_Y = 62, PAD = 18;
+  const rankOf = (id) => depths[id] || 0;
+
+  // --- 1. rows, with a chain of dummies for every long edge ------------------
   const rows = [];
-  nodes.forEach((node) => {
-    const row = depths[node.id] || 0;
-    (rows[row] = rows[row] || []).push(node);
+  const item = new Map();
+  const add = (rank, entry) => {
+    (rows[rank] = rows[rank] || []).push(entry);
+    item.set(entry.id, entry);
+    return entry;
+  };
+  nodes.forEach((node) => add(rankOf(node.id), { id: node.id, node, width: W }));
+
+  const chains = edges.map((edge, index) => {
+    const from = rankOf(edge.from), to = rankOf(edge.to);
+    const path = [edge.from];
+    for (let rank = from + 1; rank < to; rank++) {
+      path.push(add(rank, { id: `~lane${index}@${rank}`, width: LANE }).id);
+    }
+    path.push(edge.to);
+    return path;
   });
 
-  const widest = Math.max(...rows.map((row) => (row || []).length));
-  const canvas = widest * (W + GAP_X) - GAP_X;
-  const at = new Map();
-
-  rows.forEach((row, index) => {
-    const bunch = row || [];
-    if (index > 0) {
-      // Barycentre ordering: sit each node under the average of its parents.
-      const key = (node) => {
-        const placed = (node.parents || [])
-          .map((id) => at.get(id))
-          .filter(Boolean)
-          .map((spot) => spot.x + W / 2);
-        return placed.length ? placed.reduce((a, b) => a + b, 0) / placed.length : Number.MAX_SAFE_INTEGER;
-      };
-      bunch.sort((a, b) => key(a) - key(b));
+  // --- 2. order each row by the average position of its neighbours ----------
+  const above = new Map(), below = new Map();
+  const link = (map, key, value) => map.set(key, [...(map.get(key) || []), value]);
+  chains.forEach((path) => {
+    for (let i = 0; i + 1 < path.length; i++) {
+      link(above, path[i + 1], path[i]);
+      link(below, path[i], path[i + 1]);
     }
-    const rowWidth = bunch.length * (W + GAP_X) - GAP_X;
-    const start = PAD + (canvas - rowWidth) / 2;
-    bunch.forEach((node, column) => {
-      at.set(node.id, { x: start + column * (W + GAP_X), y: PAD + index * (H + GAP_Y) });
+  });
+
+  let index = new Map();
+  const reindex = () => rows.forEach((row) => (row || []).forEach((entry, i) => index.set(entry.id, i)));
+  reindex();
+  const barycentre = (entry, neighbours) => {
+    const near = (neighbours.get(entry.id) || []).map((id) => index.get(id)).filter((n) => n !== undefined);
+    return near.length ? near.reduce((a, b) => a + b, 0) / near.length : index.get(entry.id);
+  };
+  for (let pass = 0; pass < 4; pass++) {
+    const downward = pass % 2 === 0;
+    const sweep = downward ? [...rows.keys()] : [...rows.keys()].reverse();
+    sweep.forEach((rank) => {
+      const row = rows[rank];
+      if (!row || (downward ? rank === 0 : rank === rows.length - 1)) return;
+      const side = downward ? above : below;
+      row.sort((a, b) => barycentre(a, side) - barycentre(b, side));
+      reindex();
+    });
+  }
+
+  // --- 3. positions: rows centred on the widest row -------------------------
+  const rowWidth = (row) => (row || []).reduce((total, e) => total + e.width + GAP_X, -GAP_X);
+  const canvas = Math.max(...Array.from(rows, rowWidth));   // hole-safe
+  rows.forEach((row, rank) => {
+    let x = PAD + (canvas - rowWidth(row)) / 2;
+    (row || []).forEach((entry) => {
+      entry.x = x;
+      entry.y = PAD + rank * (H + GAP_Y);
+      x += entry.width + GAP_X;
     });
   });
 
+  // --- 4. ports: fan connections across a node's edge, sorted by direction ---
+  const ports = new Map();
+  const centre = (entry) => entry.x + entry.width / 2;
+  const assign = (entry, ids, edgeY, key) => {
+    const sorted = ids.slice().sort((a, b) => centre(item.get(a)) - centre(item.get(b)));
+    sorted.forEach((other, i) => {
+      const span = entry.width * 0.72;
+      const offset = sorted.length === 1 ? 0 : (i / (sorted.length - 1) - 0.5) * span;
+      ports.set(`${key}:${entry.id}:${other}`, { x: centre(entry) + offset, y: edgeY(entry) });
+    });
+  };
+  // A lane spans the full row height exactly as a node does, so an edge
+  // crossing a row travels straight down its lane rather than sweeping across.
+  item.forEach((entry) => {
+    assign(entry, above.get(entry.id) || [], (e) => e.y, "in");
+    assign(entry, below.get(entry.id) || [], (e) => e.y + H, "out");
+  });
+
+  // --- 5. one orthogonal path per edge, through its lane waypoints ----------
+  // Right angles are far easier to trace than sweeping curves when several
+  // edges share the space between two rows.
+  const elbow = (a, b) => {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    if (Math.abs(dx) < 0.5) return ` L${b.x},${b.y}`;           // straight down a lane
+    const mid = a.y + dy / 2;
+    const r = Math.max(0, Math.min(9, Math.abs(dx) / 2, Math.abs(dy) / 2));
+    const step = Math.sign(dx);
+    return ` L${a.x},${mid - r}` +
+           ` Q${a.x},${mid} ${a.x + step * r},${mid}` +
+           ` L${b.x - step * r},${mid}` +
+           ` Q${b.x},${mid} ${b.x},${mid + r}` +
+           ` L${b.x},${b.y}`;
+  };
+
+  const paths = chains.map((path) => {
+    const points = [];
+    for (let i = 0; i + 1 < path.length; i++) {
+      points.push(ports.get(`out:${path[i]}:${path[i + 1]}`));
+      points.push(ports.get(`in:${path[i + 1]}:${path[i]}`));
+    }
+    const clean = points.filter(Boolean);
+    if (clean.length < 2) return "";
+    let d = `M${clean[0].x},${clean[0].y}`;
+    for (let i = 1; i < clean.length; i++) d += elbow(clean[i - 1], clean[i]);
+    return d;
+  });
+  // An edge routed through lanes spans more than one row.
+  const spans = chains.map((path) => path.length > 2);   // routed through a lane
+
+  const at = new Map();
+  item.forEach((entry) => entry.node && at.set(entry.id, { x: entry.x, y: entry.y }));
   return {
-    W, H, at,
+    W, H, at, paths, spans,
     width: canvas + PAD * 2,
     height: PAD * 2 + rows.length * (H + GAP_Y) - GAP_Y,
   };
+}
+
+function draftPanel() {
+  if (!state.draftOpen) return "";
+  const doc = state.detail.document;
+  const when = doc.draft_updated_at
+    ? `edited ${esc(ago(doc.draft_updated_at))}` : "nothing written yet";
+  return `
+    <form class="inset sticky-note" id="draft-form">
+      <div class="field">
+        <label for="draft-text">🗒️ Side note <span class="hint">${when}</span></label>
+        <textarea id="draft-text" name="draft" rows="9"
+          placeholder="Scratch space for this project — anything that is not a node yet. Paste freely.">${esc(doc.draft || "")}</textarea>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="primary">Save note</button>
+        <button type="button" data-draft-close="1">Close</button>
+        <span class="hint">Ctrl/Cmd + Enter saves</span>
+        <span class="error" data-error></span>
+      </div>
+    </form>`;
 }
 
 function treeCard(graph) {
@@ -728,26 +883,54 @@ function treeCard(graph) {
     <section class="card">
       <div class="card-head"><h2>Tree</h2></div>
       <p class="empty">Every project starts with one root action — what you did first. Everything else hangs off it.</p>
+      ${draftPanel()}
       <div id="root-form-host"></div>
       <button id="add-root" class="primary">+ Create the root action</button>
+      <button data-draft="1">🗒️ Side note</button>
     </section>`;
   }
 
-  const { W, H, at, width, height } = layout(nodes, graph.depths);
+  const { W, H, at, paths, spans, width, height } = layout(nodes, graph.depths, graph.edges);
   const lit = state.selected
     ? new Set([state.selected, ...ancestorIds(state.selected), ...childIds(state.selected)])
     : null;
 
-  const edges = graph.edges.map((edge) => {
-    const from = at.get(edge.from), to = at.get(edge.to);
-    if (!from || !to) return "";
-    const x1 = from.x + W / 2, y1 = from.y + H, x2 = to.x + W / 2, y2 = to.y;
-    const mid = (y1 + y2) / 2;
+  const drawn = graph.edges.map((edge, index) => {
+    const d = paths[index];
+    if (!d) return null;
     const active = lit && lit.has(edge.from) && lit.has(edge.to);
-    const cls = `edge${active ? " on" : ""}${lit && !active ? " off" : ""}`;
-    return `<path class="${cls}" d="M${x1},${y1} C${x1},${mid} ${x2},${mid} ${x2},${y2}"
-      stroke-linecap="round" marker-end="url(#arrow${active ? "-on" : ""})"></path>`;
-  }).join("");
+    const far = spans[index];
+    const cls = `edge${active ? " on" : ""}${lit && !active ? " off" : ""}${far ? " far" : ""}`;
+    // The invisible twin is the hover target: a 1px line is hard to hit.
+    return {
+      far,
+      markup: `<g class="edge-group">
+        <path class="edge-hit" d="${d}"></path>
+        <path class="${cls}" d="${d}" marker-end="url(#arrow${active ? "-on" : ""})"></path>
+      </g>`,
+    };
+  }).filter(Boolean);
+  // Long edges go down first so the short, local structure reads on top.
+  const edges = [...drawn.filter((e) => e.far), ...drawn.filter((e) => !e.far)]
+    .map((e) => e.markup).join("");
+
+  // The side note is not a node: it hangs beside the root as a sticky.
+  const rootNode = nodes.find((node) => !(node.parents || []).length);
+  const rootAt = rootNode ? at.get(rootNode.id) : null;
+  const hasDraft = Boolean((state.detail?.document.draft || "").trim());
+  let sticky = "", canvasWidth = width;
+  if (rootAt) {
+    const sx = rootAt.x + W + 18, sy = rootAt.y + (H - 44) / 2;
+    canvasWidth = Math.max(width, sx + 44 + 18);
+    sticky = `
+      <g class="sticky" data-draft="1" tabindex="0" role="button"
+         transform="rotate(-4 ${sx + 22} ${sy + 22})">
+        <rect x="${sx}" y="${sy}" width="44" height="44" rx="7"></rect>
+        <text x="${sx + 22}" y="${sy + 29}" text-anchor="middle" font-size="19">🗒️</text>
+        ${hasDraft ? `<circle class="dot" cx="${sx + 41}" cy="${sy + 3}" r="5"></circle>` : ""}
+        <title>Side note — ${hasDraft ? "click to read or edit" : "click to write one"}</title>
+      </g>`;
+  }
 
   const boxes = nodes.map((node) => {
     const spot = at.get(node.id);
@@ -775,12 +958,13 @@ function treeCard(graph) {
       <h2>Tree — what led to what</h2>
       <span class="hint">click a node to see it and add work underneath</span>
     </div>
+    ${draftPanel()}
     <div class="legend">
       <span class="l-action">action</span><span class="l-note">note</span><span class="l-dataset">dataset</span>
       <span class="l-experiment">experiment</span><span class="l-artifact">artifact</span>
     </div>
     <div class="scroll">
-      <svg viewBox="0 0 ${width} ${height}" width="100%" style="max-width:${width}px;height:auto;margin:0 auto"
+      <svg viewBox="0 0 ${canvasWidth} ${height}" width="100%" style="max-width:${canvasWidth}px;height:auto;margin:0 auto"
            role="img" aria-label="Project node tree">
         <defs>
           <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
@@ -796,7 +980,7 @@ function treeCard(graph) {
             <feDropShadow dx="0" dy="5" stdDeviation="6" flood-color="#0b0d14" flood-opacity="0.20"></feDropShadow>
           </filter>
         </defs>
-        ${edges}${boxes}
+        ${edges}${boxes}${sticky}
       </svg>
     </div>
   </section>`;
@@ -1330,6 +1514,35 @@ function wire() {
     };
   });
 
+  host.querySelectorAll("[data-draft]").forEach((node) => {
+    const toggle = () => { state.draftOpen = !state.draftOpen; paint(); };
+    node.onclick = toggle;
+    node.onkeydown = (event) => {
+      if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggle(); }
+    };
+  });
+
+  const draftForm = host.querySelector("#draft-form");
+  if (draftForm) {
+    const text = draftForm.elements.draft;
+    text.focus();
+    text.setSelectionRange(text.value.length, text.value.length);
+    host.querySelector("[data-draft-close]").onclick = () => { state.draftOpen = false; paint(); };
+    text.onkeydown = (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") draftForm.requestSubmit();
+    };
+    draftForm.onsubmit = async (event) => {
+      event.preventDefault();
+      try {
+        await api(`api/projects/${encodeURIComponent(state.slug)}`, "PATCH", { draft: text.value });
+        state.draftOpen = false;
+        await load();
+      } catch (failure) {
+        draftForm.querySelector("[data-error]").textContent = failure.message;
+      }
+    };
+  }
+
   host.querySelectorAll("[data-form]").forEach((button) => {
     button.onclick = () => {
       const mode = button.dataset.form;
@@ -1434,8 +1647,20 @@ async function renderDetail(slug) {
   paint();
 }
 
+function showStale(serverVersion) {
+  const banner = document.getElementById("stale");
+  const stale = !(serverVersion >= NEEDS_API);
+  banner.hidden = !stale;
+  if (stale) {
+    banner.innerHTML = `<strong>The dashboard is newer than the running server.</strong>
+      <span>Saving may fail with &ldquo;not found&rdquo; until you restart it:</span>
+      <code>python3 -m mlops.web</code>`;
+  }
+}
+
 async function load() {
   const payload = await api("api/projects");
+  showStale(payload.api_version);
   state.projects = payload.projects;
   state.canOpenPaths = !!payload.can_open_paths;
   document.getElementById("root-label").textContent = payload.root;

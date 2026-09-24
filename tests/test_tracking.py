@@ -292,3 +292,43 @@ def test_markdown_export_covers_new_sections(tmp_path, writer):
     assert "ds-002 --> exp-001" in text
     assert "(edited " in text
     assert "link: model card" in text
+
+
+# ------------------------------------------------------------- the side note
+
+def test_the_side_note_is_project_text_not_a_node(writer, tmp_path):
+    from mlops import load_project
+
+    before = len(writer.nodes)
+    writer.set_draft("mixed30 beat textonly.\n\nPasted:\n  eval/loss 0.0830\n\nnext: try r=64")
+
+    assert len(writer.nodes) == before            # nothing joined the graph
+    assert len(writer.graph()["nodes"]) == before
+    assert writer.draft_updated_at
+
+    writer.save(tmp_path)
+    reloaded = load_project("lineage-demo", tmp_path)
+    assert reloaded.draft.splitlines()[0] == "mixed30 beat textonly."
+    assert "eval/loss 0.0830" in reloaded.draft   # blank lines and indent survive
+    assert reloaded.draft_updated_at == writer.draft_updated_at
+
+
+def test_clearing_the_side_note_drops_its_timestamp(writer):
+    writer.set_draft("something")
+    assert writer.draft_updated_at
+    writer.set_draft("   ")
+    assert writer.draft_updated_at == ""
+
+
+def test_documents_written_before_the_side_note_still_load():
+    restored = MLOpsWriter.from_dict({"project_name": "old", "nodes": []})
+    assert (restored.draft, restored.draft_updated_at) == ("", "")
+
+
+def test_the_side_note_reaches_the_markdown_export(writer, tmp_path):
+    writer.set_draft("remember to re-run with --fp16")
+    path = tmp_path / "notes.md"
+    writer.to_markdown(path)
+    text = path.read_text()
+    assert "## Side note" in text
+    assert "remember to re-run with --fp16" in text

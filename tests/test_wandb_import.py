@@ -10,6 +10,8 @@ from mlops.integrations.wandb import (
     from_local,
     import_run,
     import_run_data,
+    load,
+    looks_local,
 )
 
 
@@ -201,3 +203,37 @@ def test_run_paths_are_normalised(given, expected):
 def test_bad_run_paths_are_rejected(bad):
     with pytest.raises(ValueError):
         _normalise_path(bad)
+
+
+# ------------------------------------------------------- choosing the source
+
+@pytest.mark.parametrize("source", [
+    "~/Minje/smol_docling_generator/wandb/run-20260911_113035-19hgozfy",
+    "/home/rookie/x/wandb/run-20260911_113035-19hgozfy",
+    "./wandb/run-20260101_000000-abc",
+    "wandb/offline-run-20260101_000000-abc",
+])
+def test_filesystem_paths_are_recognised_as_local(source):
+    assert looks_local(source) is True
+
+
+@pytest.mark.parametrize("source", [
+    "mmsuren0909-rookie-systems/Docling-Restart/19hgozfy",
+    "/mmsuren0909-rookie-systems/Docling-Restart/runs/19hgozfy",
+    "https://wandb.ai/team/proj/runs/abc123",
+])
+def test_wandb_run_paths_are_not_mistaken_for_directories(source):
+    assert looks_local(source) is False
+
+
+def test_a_missing_run_directory_says_so_instead_of_calling_the_api(tmp_path):
+    missing = tmp_path / "wandb" / "run-20260911_113035-19hgozfy"
+    with pytest.raises(FileNotFoundError) as excinfo:
+        load(str(missing))
+    message = str(excinfo.value)
+    assert "no wandb run directory at" in message
+    assert "entity/project/run_id" in message      # points at the other source
+
+
+def test_an_existing_directory_still_loads_locally(tmp_path):
+    assert load(str(make_run(tmp_path))).id == "niqajvlo"

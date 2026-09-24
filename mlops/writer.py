@@ -296,6 +296,10 @@ class MLOpsWriter:
     created_at: str = field(default_factory=_timestamp)
     nodes: list[dict[str, Any]] = field(default_factory=list)
     utilities: dict[str, Any] = field(default_factory=dict)
+    # A free-text scratchpad for the project. Deliberately not a node: it holds
+    # the thinking that has no place in the graph yet.
+    draft: str = ""
+    draft_updated_at: str = ""
 
     def __post_init__(self) -> None:
         # Folder this project was last saved to/loaded from; enables run autosave.
@@ -851,6 +855,12 @@ class MLOpsWriter:
 
     # ---------------------------------------------------------------- utility
 
+    def set_draft(self, text: str) -> str:
+        """Replace the project's side note and stamp when it changed."""
+        self.draft = str(text)
+        self.draft_updated_at = _timestamp() if self.draft.strip() else ""
+        return self.draft
+
     def add_utility(self, name: str, value: Any) -> None:
         self.utilities[name] = value
 
@@ -979,6 +989,8 @@ class MLOpsWriter:
         lines += ["", "## Lineage"]
         for edge in self.graph()["edges"]:
             lines.append(f"- {edge['from']} --> {edge['to']}")
+        if self.draft.strip():
+            lines += ["", "## Side note", "", self.draft.rstrip()]
         lines += ["", "## Utilities"]
         for key, value in self.utilities.items():
             lines.append(f"- **{key}**: {value}")

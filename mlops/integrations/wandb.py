@@ -194,7 +194,13 @@ def from_api(run_path: str) -> RunData:
         ) from error
 
     path = _normalise_path(run_path)
-    run = wandb.Api().run(path)
+    try:
+        run = wandb.Api().run(path)
+    except Exception as error:                 # wandb raises its own CommError
+        raise LookupError(
+            f"W&B has no run at '{path}' (read from {run_path!r}) — check the "
+            "entity, which for a team run is the team and not your username"
+        ) from error
     return _from_api_run(run)
 
 
@@ -250,10 +256,33 @@ def _normalise_path(run_path: str) -> str:
     return "/".join(segments[:3])
 
 
+# wandb names its directories run-<YYYYMMDD>_<HHMMSS>-<id>, which nothing in a
+# W&B run path ever looks like.
+LOCAL_RUN_DIR = re.compile(r"(offline-)?run-\d{8}_\d{6}-\w+")
+
+
+def looks_local(source: str) -> bool:
+    """Whether ``source`` is meant as a directory on this machine."""
+    text = str(source)
+    return bool(
+        LOCAL_RUN_DIR.search(text)
+        or text.startswith(("~", "./", "../"))
+        or "/wandb/" in text
+    )
+
+
 def load(source: str | Path) -> RunData:
     """Pick the local or API source based on what ``source`` looks like."""
-    if Path(str(source)).expanduser().exists():
-        return from_local(source)
+    path = Path(str(source)).expanduser()
+    if path.exists():
+        return from_local(path)
+    if looks_local(str(source)):
+        # Falling through to the API here would parse a filesystem path as
+        # entity/project/run_id and fail somewhere confusing.
+        raise FileNotFoundError(
+            f"no wandb run directory at {path} — if that run lives on W&B rather "
+            "than this machine, pass 'entity/project/run_id' or the run's URL"
+        )
     return from_api(str(source))
 
 
